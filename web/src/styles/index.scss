@@ -1,0 +1,19 @@
+$font-family-base:
+  Inter, 'PingFang SC', 'Microsoft YaHei', -apple-system, 'Segoe UI', sans-serif;
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: $font-family-base;
+  background-color: var(--color-fill-2);
+  color: var(--color-text-1);
+}
+
+* {
+  box-sizing: border-box;
+}

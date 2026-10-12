@@ -1,0 +1,27 @@
+# 依赖与构建产物
+node_modules/
+/dist/
+vendor/
+
+# 前端产物不提交，仅保留占位文件保证未构建时后端可编译
+internal/webassets/dist/*
+!internal/webassets/dist/.gitkeep
+
+# 可执行文件
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 测试与覆盖率
+*.test
+*.out
+
+# 日志与临时文件
+*.log
+tmp/
+
+# IDE
+.idea/
+.vscode/
