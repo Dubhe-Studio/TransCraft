@@ -2,12 +2,14 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
-import { partDetail, partEntries, saveTranslation } from '../api/part'
+import { approveEntry, partDetail, partEntries, saveSuggestion, saveTranslation } from '../api/part'
 import type { PartDetail, TranslationEntry } from '../api/types'
+import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 
 const route = useRoute()
 const ui = useUiStore()
+const auth = useAuthStore()
 
 const partId = Number(route.params.id)
 
@@ -20,8 +22,13 @@ type FilterMode = 'all' | 'untranslated' | 'translated'
 const filterMode = ref<FilterMode>('all')
 const keyword = ref('')
 
+// 未翻译条目靠前，组内保持接口返回顺序
+const sortedEntries = computed(() => {
+  return [...entries.value].sort((a, b) => Number(!a.target) * -1 + Number(!b.target))
+})
+
 const filteredEntries = computed(() => {
-  return entries.value.filter((entry) => {
+  return sortedEntries.value.filter((entry) => {
     if (filterMode.value === 'untranslated' && entry.target) return false
     if (filterMode.value === 'translated' && !entry.target) return false
     if (!keyword.value) return true
@@ -36,6 +43,13 @@ const selectedKey = ref('')
 const selected = computed(() => entries.value.find((e) => e.key === selectedKey.value) ?? null)
 const draft = ref('')
 const saving = ref(false)
+const approving = ref(false)
+
+const suggestVisible = ref(false)
+const suggestText = ref('')
+const suggesting = ref(false)
+
+const primaryLanguage = computed(() => auth.user?.primaryLanguage ?? '')
 
 // 语言快速切换时旧请求不得覆盖新数据
 let loadSeq = 0
@@ -90,21 +104,101 @@ function selectEntry(entry: TranslationEntry) {
   })
 }
 
-async function save() {
+// 排序后列表中当前条目之后的第一个未翻译条目
+function nextUntranslated(): TranslationEntry | null {
+  const list = sortedEntries.value
+  const index = list.findIndex((e) => e.key === selectedKey.value)
+  for (let i = index + 1; i < list.length; i += 1) {
+    if (!list[i].target) return list[i]
+  }
+  return null
+}
+
+function moveTo(entry: TranslationEntry) {
+  selectedKey.value = entry.key
+  draft.value = entry.target
+}
+
+function moveToNextUntranslated() {
+  const next = nextUntranslated()
+  if (next) {
+    moveTo(next)
+  } else {
+    Message.info('后面没有更多未翻译条目了')
+  }
+}
+
+// 返回是否保存成功，供"保存并继续"决定要不要移动选中项
+async function persistDraft(): Promise<boolean> {
   // 先捕获当前条目引用，await 期间用户切换条目也不会写错目标
   const entry = selected.value
-  if (!entry) return
+  if (!entry) return false
   const text = draft.value
   saving.value = true
   try {
     await saveTranslation(partId, ui.currentLanguage, entry.key, text)
     entry.target = text
-    Message.success('译文已保存')
+    return true
   } catch (error) {
     console.error('保存译文失败:', error)
     Message.error(error instanceof Error ? error.message : '保存失败')
+    return false
   } finally {
     saving.value = false
+  }
+}
+
+async function saveAndStay() {
+  if (await persistDraft()) {
+    Message.success('译文已保存')
+  }
+}
+
+async function saveAndNext() {
+  if (await persistDraft()) {
+    moveToNextUntranslated()
+  }
+}
+
+async function approve() {
+  const entry = selected.value
+  if (!entry) return
+  approving.value = true
+  try {
+    await approveEntry(partId, ui.currentLanguage, entry.key)
+    entry.approved = true
+    Message.success('已批准')
+  } catch (error) {
+    console.error('批准译文失败:', error)
+    Message.error(error instanceof Error ? error.message : '批准失败')
+  } finally {
+    approving.value = false
+  }
+}
+
+function openSuggest() {
+  suggestText.value = draft.value
+  suggestVisible.value = true
+}
+
+async function submitSuggestion(): Promise<boolean> {
+  const entry = selected.value
+  if (!entry) return false
+  if (!suggestText.value) {
+    Message.error('建议内容不能为空')
+    return false
+  }
+  suggesting.value = true
+  try {
+    await saveSuggestion(partId, ui.currentLanguage, entry.key, suggestText.value)
+    Message.success('建议已提交')
+    return true
+  } catch (error) {
+    console.error('提交建议失败:', error)
+    Message.error(error instanceof Error ? error.message : '提交失败')
+    return false
+  } finally {
+    suggesting.value = false
   }
 }
 </script>
@@ -126,18 +220,59 @@ async function save() {
           <a-typography-text type="secondary">{{ part.namespace }}</a-typography-text>
         </div>
 
-        <div class="translate__body">
-          <div class="translate__list">
-            <div class="translate__toolbar">
-              <a-radio-group v-model="filterMode" type="button" size="small">
-                <a-radio value="all">全部</a-radio>
-                <a-radio value="untranslated">未翻译</a-radio>
-                <a-radio value="translated">已翻译</a-radio>
-              </a-radio-group>
-              <a-input-search v-model="keyword" size="small" placeholder="搜索键名或内容" allow-clear />
+        <div v-if="selected" class="translate__panel">
+          <div class="translate__key-row">
+            <a-typography-text class="translate__key" code>{{ selected.key }}</a-typography-text>
+            <a-tag v-if="selected.approved" color="green" size="small">已批准</a-tag>
+          </div>
+          <div class="translate__field">
+            <div class="translate__field-label">模板语言（{{ part.referenceLanguage }}）</div>
+            <div class="translate__block">{{ selected.source }}</div>
+          </div>
+          <div class="translate__field">
+            <div class="translate__field-label">第一语言（{{ primaryLanguage }}）</div>
+            <div class="translate__block" :class="{ 'translate__block--empty': !selected.primary }">
+              {{ selected.primary || '暂无第一语言译文' }}
             </div>
+          </div>
+          <div class="translate__field">
+            <div class="translate__field-label">当前译文（{{ ui.currentLanguage }}）</div>
+            <a-textarea
+              v-model="draft"
+              :auto-size="{ minRows: 3 }"
+              placeholder="输入译文"
+            />
+          </div>
+          <div class="translate__actions">
+            <a-button type="primary" :loading="saving" @click="saveAndNext">保存并继续</a-button>
+            <a-button :loading="saving" @click="saveAndStay">保存并停留</a-button>
+            <a-button
+              v-if="part.canApprove"
+              status="success"
+              :loading="approving"
+              :disabled="selected.approved"
+              @click="approve"
+            >
+              批准
+            </a-button>
+            <a-button @click="openSuggest">建议</a-button>
+            <a-button @click="moveToNextUntranslated">跳过</a-button>
+          </div>
+        </div>
+        <a-empty v-else description="从下方列表选择一条要翻译的条目" />
 
-            <a-empty v-if="filteredEntries.length === 0" description="没有符合条件的条目" />
+        <div class="translate__list">
+          <div class="translate__toolbar">
+            <a-radio-group v-model="filterMode" type="button" size="small">
+              <a-radio value="all">全部</a-radio>
+              <a-radio value="untranslated">未翻译</a-radio>
+              <a-radio value="translated">已翻译</a-radio>
+            </a-radio-group>
+            <a-input-search v-model="keyword" size="small" placeholder="搜索键名或内容" allow-clear />
+          </div>
+
+          <a-empty v-if="filteredEntries.length === 0" description="没有符合条件的条目" />
+          <a-scrollbar v-else class="translate__scroll">
             <div
               v-for="entry in filteredEntries"
               :key="entry.key"
@@ -147,30 +282,25 @@ async function save() {
             >
               <div class="translate__entry-key">{{ entry.key }}</div>
               <div class="translate__entry-text">{{ entry.target || entry.source }}</div>
-              <icon-check-circle-fill v-if="entry.target" class="translate__entry-done" />
+              <icon-check-circle-fill v-if="entry.approved" class="translate__entry-approved" />
+              <icon-check-circle-fill v-else-if="entry.target" class="translate__entry-done" />
             </div>
-          </div>
-
-          <div v-if="selected" class="translate__editor">
-            <a-typography-text class="translate__key" code>{{ selected.key }}</a-typography-text>
-            <div class="translate__field">
-              <div class="translate__field-label">参考原文（{{ part.projectName }} 参考语言）</div>
-              <div class="translate__source">{{ selected.source }}</div>
-            </div>
-            <div class="translate__field">
-              <div class="translate__field-label">译文（{{ ui.currentLanguage }}）</div>
-              <a-textarea
-                v-model="draft"
-                :auto-size="{ minRows: 4 }"
-                placeholder="输入译文"
-              />
-            </div>
-            <a-button type="primary" :loading="saving" @click="save">保存译文</a-button>
-          </div>
-          <a-empty v-else description="从左侧选择一条要翻译的条目" />
+          </a-scrollbar>
         </div>
       </template>
     </a-spin>
+
+    <a-modal
+      v-model:visible="suggestVisible"
+      title="提交建议"
+      :ok-loading="suggesting"
+      :on-before-ok="submitSuggestion"
+    >
+      <a-typography-text type="secondary">
+        建议不会直接成为译文，交由有批准权限的成员处理。
+      </a-typography-text>
+      <a-textarea v-model="suggestText" :auto-size="{ minRows: 3 }" placeholder="输入建议内容" />
+    </a-modal>
   </div>
 </template>
 
@@ -187,31 +317,58 @@ async function save() {
     margin-bottom: 16px;
   }
 
-  &__body {
-    display: grid;
-    grid-template-columns: 320px 1fr;
-    gap: 24px;
-    align-items: start;
+  &__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  &__key-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__field-label {
+    color: var(--color-text-2);
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+
+  &__block {
+    padding: 10px 12px;
+    border-radius: 4px;
+    background-color: var(--color-fill-2);
+    color: var(--color-text-1);
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    &--empty {
+      color: var(--color-text-3);
+    }
+  }
+
+  &__actions {
+    display: flex;
+    gap: 8px;
   }
 
   &__list {
     border: 1px solid var(--color-border);
     border-radius: 4px;
     background-color: var(--color-bg-2);
-    max-height: 70vh;
-    overflow-y: auto;
+  }
+
+  &__scroll {
+    max-height: 40vh;
   }
 
   &__toolbar {
     display: flex;
-    flex-direction: column;
     gap: 8px;
     padding: 8px;
     border-bottom: 1px solid var(--color-border);
-    position: sticky;
-    top: 0;
-    background-color: var(--color-bg-2);
-    z-index: 1;
   }
 
   &__entry {
@@ -249,28 +406,15 @@ async function save() {
     right: 10px;
     top: 50%;
     transform: translateY(-50%);
+    color: rgb(var(--primary-6));
+  }
+
+  &__entry-approved {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
     color: rgb(var(--success-6));
-  }
-
-  &__editor {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  &__field-label {
-    color: var(--color-text-2);
-    font-size: 13px;
-    margin-bottom: 6px;
-  }
-
-  &__source {
-    padding: 10px 12px;
-    border-radius: 4px;
-    background-color: var(--color-fill-2);
-    color: var(--color-text-1);
-    white-space: pre-wrap;
-    word-break: break-word;
   }
 }
 </style>

@@ -95,6 +95,8 @@ export interface PartInput {
 
 export interface PartDetail extends Part {
   projectName: string
+  // 部件所属项目的参考语言，面板据此标注模板语言
+  referenceLanguage: string
   // 当前用户是否可批准译文：所有者/维护者或含批准权限的项目用户组成员
   canApprove: boolean
 }
