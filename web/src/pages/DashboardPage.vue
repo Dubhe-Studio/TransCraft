@@ -78,7 +78,7 @@ function formatNumber(value: number): string {
               <icon-folder class="progress-table__folder" />
               {{ project.name }}
             </span>
-            <span class="progress-table__cell progress-table__cell--number">
+            <span class="progress-table__cell progress-table__cell--percent">
               <icon-check-circle-fill v-if="project.translatedPercent >= 100" class="progress-table__done" />
               <template v-else>{{ project.translatedPercent }}%</template>
             </span>
@@ -157,6 +157,10 @@ function formatNumber(value: number): string {
 
     &--number {
       color: var(--color-text-1);
+    }
+
+    &--percent {
+      color: rgb(var(--success-6));
     }
   }
 
