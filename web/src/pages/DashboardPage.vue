@@ -76,9 +76,7 @@ function formatNumber(value: number): string {
           <div class="progress-table__row">
             <span class="progress-table__cell progress-table__cell--project">
               <icon-folder class="progress-table__folder" />
-              <a-link @click.stop="router.push({ name: 'project-detail', params: { id: project.id } })">
-                {{ project.name }}
-              </a-link>
+              {{ project.name }}
             </span>
             <span class="progress-table__cell progress-table__cell--number">
               <icon-check-circle-fill v-if="project.translatedPercent >= 100" class="progress-table__done" />
@@ -95,7 +93,7 @@ function formatNumber(value: number): string {
           <a-progress
             :percent="project.translatedPercent / 100"
             :show-text="false"
-            color="rgb(var(--success-6))"
+            color="rgb(var(--primary-6))"
             track-color="var(--color-fill-2)"
           />
         </div>
@@ -154,6 +152,7 @@ function formatNumber(value: number): string {
       display: flex;
       align-items: center;
       gap: 8px;
+      color: var(--color-text-1);
     }
 
     &--number {
@@ -162,7 +161,7 @@ function formatNumber(value: number): string {
   }
 
   &__folder {
-    color: rgb(var(--success-6));
+    color: rgb(var(--primary-6));
     flex-shrink: 0;
   }
 
