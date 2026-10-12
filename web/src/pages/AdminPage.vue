@@ -1,12 +1,23 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
-import { adminUsers, createInvite, deleteInvite, invites, updateUserRole } from '../api/admin'
+import {
+  adminUsers,
+  createInvite,
+  createSiteGroup,
+  deleteInvite,
+  deleteSiteGroup,
+  invites,
+  siteGroups,
+  updateSiteGroup,
+  updateUserRole,
+} from '../api/admin'
 import { siteLinks, updateSiteLinks } from '../api/site'
-import type { AdminUser, InviteCode, SiteLinks, UserRole } from '../api/types'
+import type { AdminUser, InviteCode, SiteGroup, SiteGroupInput, SiteLinks, UserRole } from '../api/types'
 
 const userList = ref<AdminUser[]>([])
 const inviteList = ref<InviteCode[]>([])
+const groupList = ref<SiteGroup[]>([])
 const linksForm = reactive<SiteLinks>({ contact: '', docs: '', contribute: '', support: '' })
 
 const loading = ref(true)
@@ -24,9 +35,10 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [users, codes, links] = await Promise.all([adminUsers(), invites(), siteLinks()])
+    const [users, codes, groups, links] = await Promise.all([adminUsers(), invites(), siteGroups(), siteLinks()])
     userList.value = users
     inviteList.value = codes
+    groupList.value = groups
     linksForm.contact = links.contact
     linksForm.docs = links.docs
     linksForm.contribute = links.contribute
@@ -88,6 +100,60 @@ async function saveLinks() {
     Message.error(error instanceof Error ? error.message : '保存失败')
   } finally {
     linksSaving.value = false
+  }
+}
+
+// 用户组编辑弹窗：editing 为 null 表示新建
+const groupVisible = ref(false)
+const groupEditing = ref<SiteGroup | null>(null)
+const groupForm = reactive<SiteGroupInput>({ name: '', members: [] })
+const groupSubmitting = ref(false)
+
+function openCreateGroup() {
+  groupEditing.value = null
+  groupForm.name = ''
+  groupForm.members = []
+  groupVisible.value = true
+}
+
+function openEditGroup(group: SiteGroup) {
+  groupEditing.value = group
+  groupForm.name = group.name
+  groupForm.members = [...group.members]
+  groupVisible.value = true
+}
+
+// 返回是否允许关闭弹窗，校验失败或提交失败时保持弹窗打开
+async function submitGroup(): Promise<boolean> {
+  if (!groupForm.name) {
+    Message.error('用户组名称不能为空')
+    return false
+  }
+  groupSubmitting.value = true
+  try {
+    const editing = groupEditing.value
+    groupList.value = editing
+      ? await updateSiteGroup(editing.id, { ...groupForm })
+      : await createSiteGroup({ ...groupForm })
+    Message.success(editing ? '用户组已更新' : '用户组已创建')
+    return true
+  } catch (error) {
+    console.error('保存用户组失败:', error)
+    Message.error(error instanceof Error ? error.message : '保存失败')
+    return false
+  } finally {
+    groupSubmitting.value = false
+  }
+}
+
+async function confirmDeleteGroup(group: SiteGroup) {
+  try {
+    await deleteSiteGroup(group.id)
+    groupList.value = groupList.value.filter((item) => item.id !== group.id)
+    Message.success(`用户组 ${group.name} 已删除`)
+  } catch (error) {
+    console.error('删除用户组失败:', error)
+    Message.error(error instanceof Error ? error.message : '删除失败')
   }
 }
 </script>
@@ -161,6 +227,41 @@ async function saveLinks() {
           </a-table>
         </a-tab-pane>
 
+        <a-tab-pane key="groups" title="用户组">
+          <div class="admin__tab-actions">
+            <a-button type="primary" @click="openCreateGroup">
+              <template #icon><icon-plus /></template>
+              新建用户组
+            </a-button>
+          </div>
+          <a-table :data="groupList" :pagination="false">
+            <template #columns>
+              <a-table-column title="名称" data-index="name" />
+              <a-table-column title="成员">
+                <template #cell="{ record }">
+                  <a-space v-if="(record as SiteGroup).members.length > 0" wrap>
+                    <a-tag v-for="member in (record as SiteGroup).members" :key="member">{{ member }}</a-tag>
+                  </a-space>
+                  <a-typography-text v-else type="secondary">暂无成员</a-typography-text>
+                </template>
+              </a-table-column>
+              <a-table-column title="操作" :width="160">
+                <template #cell="{ record }">
+                  <a-space>
+                    <a-button type="text" size="small" @click="openEditGroup(record as SiteGroup)">编辑</a-button>
+                    <a-popconfirm
+                      content="确定删除该用户组？"
+                      @ok="confirmDeleteGroup(record as SiteGroup)"
+                    >
+                      <a-button type="text" status="danger" size="small">删除</a-button>
+                    </a-popconfirm>
+                  </a-space>
+                </template>
+              </a-table-column>
+            </template>
+          </a-table>
+        </a-tab-pane>
+
         <a-tab-pane key="site-links" title="站点链接">
           <a-form :model="linksForm" layout="vertical" class="admin__links" @submit-success="saveLinks">
             <a-form-item label="联系管理员" extra="留空则顶栏「更多」菜单不展示该项，支持 mailto: 地址">
@@ -182,6 +283,27 @@ async function saveLinks() {
         </a-tab-pane>
       </a-tabs>
     </a-spin>
+
+    <a-modal
+      v-model:visible="groupVisible"
+      :title="groupEditing ? '编辑用户组' : '新建用户组'"
+      :ok-loading="groupSubmitting"
+      :on-before-ok="submitGroup"
+    >
+      <a-form :model="groupForm" layout="vertical">
+        <a-form-item label="名称" required>
+          <a-input v-model="groupForm.name" placeholder="输入用户组名称" allow-clear />
+        </a-form-item>
+        <a-form-item label="成员">
+          <a-select
+            v-model="groupForm.members"
+            multiple
+            allow-create
+            placeholder="输入用户名后回车添加成员"
+          />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 

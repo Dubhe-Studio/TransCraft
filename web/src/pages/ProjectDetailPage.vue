@@ -10,9 +10,16 @@ import {
   removeMember,
   updateProject,
 } from '../api/project'
+import {
+  createProjectGroup,
+  deleteProjectGroup,
+  projectGroups,
+  updateProjectGroup,
+} from '../api/group'
 import type {
   PartProgress,
   ProjectDetail,
+  ProjectGroup,
   ProjectInput,
   ProjectMember,
   ProjectRole,
@@ -29,6 +36,7 @@ const projectId = Number(route.params.id)
 const detail = ref<ProjectDetail | null>(null)
 const partRows = ref<PartProgress[]>([])
 const memberList = ref<ProjectMember[]>([])
+const groupList = ref<ProjectGroup[]>([])
 const loading = ref(true)
 const loadError = ref('')
 
@@ -45,14 +53,16 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [project, progressRows, members] = await Promise.all([
+    const [project, progressRows, members, groups] = await Promise.all([
       projectDetail(projectId),
       projectProgress(projectId, ui.currentLanguage),
       projectMembers(projectId),
+      projectGroups(projectId),
     ])
     detail.value = project
     partRows.value = progressRows
     memberList.value = members
+    groupList.value = groups
     syncSettingsForm(project)
   } catch (error) {
     console.error('加载项目详情失败:', error)
@@ -114,6 +124,71 @@ async function confirmRemove(member: ProjectMember) {
   } catch (error) {
     console.error('移除成员失败:', error)
     Message.error(error instanceof Error ? error.message : '移除失败')
+  }
+}
+
+// 用户组编辑弹窗：editing 为 null 表示新建；批准权限单独用布尔承载，提交时展开为权限列表
+const groupVisible = ref(false)
+const groupEditing = ref<ProjectGroup | null>(null)
+const groupForm = reactive<{ name: string; approve: boolean; members: string[] }>({
+  name: '',
+  approve: false,
+  members: [],
+})
+const groupSubmitting = ref(false)
+
+function openCreateGroup() {
+  groupEditing.value = null
+  groupForm.name = ''
+  groupForm.approve = false
+  groupForm.members = []
+  groupVisible.value = true
+}
+
+function openEditGroup(group: ProjectGroup) {
+  groupEditing.value = group
+  groupForm.name = group.name
+  groupForm.approve = group.permissions.includes('approve')
+  groupForm.members = [...group.members]
+  groupVisible.value = true
+}
+
+// 返回是否允许关闭弹窗，校验失败或提交失败时保持弹窗打开
+async function submitGroup(): Promise<boolean> {
+  if (!groupForm.name) {
+    Message.error('用户组名称不能为空')
+    return false
+  }
+  groupSubmitting.value = true
+  const input = {
+    name: groupForm.name,
+    permissions: groupForm.approve ? ['approve'] : [],
+    members: groupForm.members,
+  }
+  try {
+    const editing = groupEditing.value
+    groupList.value = editing
+      ? await updateProjectGroup(projectId, editing.id, input)
+      : await createProjectGroup(projectId, input)
+    Message.success(editing ? '用户组已更新' : '用户组已创建')
+    return true
+  } catch (error) {
+    console.error('保存用户组失败:', error)
+    Message.error(error instanceof Error ? error.message : '保存失败')
+    return false
+  } finally {
+    groupSubmitting.value = false
+  }
+}
+
+async function confirmDeleteGroup(group: ProjectGroup) {
+  try {
+    await deleteProjectGroup(projectId, group.id)
+    groupList.value = groupList.value.filter((item) => item.id !== group.id)
+    Message.success(`用户组 ${group.name} 已删除`)
+  } catch (error) {
+    console.error('删除用户组失败:', error)
+    Message.error(error instanceof Error ? error.message : '删除失败')
   }
 }
 
@@ -231,8 +306,52 @@ async function saveSettings() {
             </a-table>
           </a-tab-pane>
 
+          <a-tab-pane v-if="canManage" key="groups" title="用户组">
+            <div class="project-detail__tab-actions">
+              <a-button type="primary" @click="openCreateGroup">
+                <template #icon><icon-plus /></template>
+                新建用户组
+              </a-button>
+            </div>
+            <a-table :data="groupList" :pagination="false">
+              <template #columns>
+                <a-table-column title="名称" data-index="name" />
+                <a-table-column title="权限" :width="120">
+                  <template #cell="{ record }">
+                    <a-tag v-if="(record as ProjectGroup).permissions.includes('approve')" color="green">
+                      批准译文
+                    </a-tag>
+                    <a-typography-text v-else type="secondary">无</a-typography-text>
+                  </template>
+                </a-table-column>
+                <a-table-column title="成员">
+                  <template #cell="{ record }">
+                    <a-space v-if="(record as ProjectGroup).members.length > 0" wrap>
+                      <a-tag v-for="member in (record as ProjectGroup).members" :key="member">{{ member }}</a-tag>
+                    </a-space>
+                    <a-typography-text v-else type="secondary">暂无成员</a-typography-text>
+                  </template>
+                </a-table-column>
+                <a-table-column title="操作" :width="160">
+                  <template #cell="{ record }">
+                    <a-space>
+                      <a-button type="text" size="small" @click="openEditGroup(record as ProjectGroup)">编辑</a-button>
+                      <a-popconfirm
+                        content="确定删除该用户组？"
+                        @ok="confirmDeleteGroup(record as ProjectGroup)"
+                      >
+                        <a-button type="text" status="danger" size="small">删除</a-button>
+                      </a-popconfirm>
+                    </a-space>
+                  </template>
+                </a-table-column>
+              </template>
+            </a-table>
+          </a-tab-pane>
+
           <a-tab-pane v-if="canManage" key="settings" title="设置">
             <a-form :model="settingsForm" layout="vertical" class="project-detail__settings" @submit-success="saveSettings">
+              <a-typography-title :heading="6" class="project-detail__group-title">基本信息</a-typography-title>
               <a-form-item field="name" label="项目名称" required :rules="[{ required: true, message: '项目名称不能为空' }]">
                 <a-input v-model="settingsForm.name" allow-clear />
               </a-form-item>
@@ -242,6 +361,8 @@ async function saveSettings() {
               <a-form-item field="description" label="项目简介">
                 <a-textarea v-model="settingsForm.description" :auto-size="{ minRows: 2 }" allow-clear />
               </a-form-item>
+
+              <a-typography-title :heading="6" class="project-detail__group-title">VCS</a-typography-title>
               <a-form-item field="repoUrl" label="仓库地址" required :rules="[{ required: true, message: '仓库地址不能为空' }]">
                 <a-input v-model="settingsForm.repoUrl" allow-clear />
               </a-form-item>
@@ -254,18 +375,40 @@ async function saveSettings() {
               <a-form-item field="forkBranch" label="Fork 分支">
                 <a-input v-model="settingsForm.forkBranch" allow-clear />
               </a-form-item>
+
+              <a-typography-title :heading="6" class="project-detail__group-title">文件</a-typography-title>
               <a-form-item field="fileMask" label="语言文件掩码">
                 <a-input v-model="settingsForm.fileMask" allow-clear />
               </a-form-item>
               <a-form-item field="templatePath" label="翻译模板文件">
                 <a-input v-model="settingsForm.templatePath" allow-clear />
               </a-form-item>
+
               <a-form-item>
                 <a-button type="primary" html-type="submit" :loading="settingsSaving">保存设置</a-button>
               </a-form-item>
             </a-form>
           </a-tab-pane>
         </a-tabs>
+
+        <a-modal v-model:visible="groupVisible" :title="groupEditing ? '编辑用户组' : '新建用户组'" :ok-loading="groupSubmitting" :on-before-ok="submitGroup">
+          <a-form :model="groupForm" layout="vertical">
+            <a-form-item label="名称" required>
+              <a-input v-model="groupForm.name" placeholder="输入用户组名称" allow-clear />
+            </a-form-item>
+            <a-form-item label="权限">
+              <a-checkbox v-model="groupForm.approve">批准译文</a-checkbox>
+            </a-form-item>
+            <a-form-item label="成员">
+              <a-select
+                v-model="groupForm.members"
+                multiple
+                allow-create
+                placeholder="输入用户名后回车添加成员"
+              />
+            </a-form-item>
+          </a-form>
+        </a-modal>
 
         <a-modal v-model:visible="addVisible" title="添加成员" :ok-loading="addSubmitting" :on-before-ok="submitAddMember">
           <a-form :model="addForm" layout="vertical">
@@ -312,6 +455,10 @@ async function saveSettings() {
 
   &__settings {
     max-width: 640px;
+  }
+
+  &__group-title {
+    margin: 8px 0 12px;
   }
 }
 </style>
