@@ -10,6 +10,8 @@ import ProjectNewPage from '../pages/ProjectNewPage.vue'
 import ProjectDetailPage from '../pages/ProjectDetailPage.vue'
 import ComponentNewPage from '../pages/ComponentNewPage.vue'
 import PartTranslatePage from '../pages/PartTranslatePage.vue'
+import SettingsPage from '../pages/SettingsPage.vue'
+import UserHomePage from '../pages/UserHomePage.vue'
 import PlaceholderPage from '../pages/PlaceholderPage.vue'
 
 declare module 'vue-router' {
@@ -37,8 +39,8 @@ export const router = createRouter({
         { path: 'components/new', name: 'component-new', component: ComponentNewPage, meta: { title: '添加部件' } },
         { path: 'parts/:id/translate', name: 'part-translate', component: PartTranslatePage, meta: { title: '翻译' } },
         // TODO: 以下均为用户确认的占位路由，对应功能落地后逐个替换为真实页面；跟踪 TODO.md 第一阶段
-        { path: 'settings', name: 'settings', component: PlaceholderPage, meta: { title: '设置' } },
-        { path: 'users/:name', name: 'user-home', component: PlaceholderPage, meta: { title: '用户主页' } },
+        { path: 'settings', name: 'settings', component: SettingsPage, meta: { title: '设置' } },
+        { path: 'users/:name', name: 'user-home', component: UserHomePage, meta: { title: '用户主页' } },
         { path: 'admin', name: 'admin', component: PlaceholderPage, meta: { title: '管理' } },
         { path: 'about', name: 'about', component: PlaceholderPage, meta: { title: '关于' } },
       ],
