@@ -10,8 +10,7 @@ import {
   saveSuggestion,
   saveTranslation,
 } from '../api/part'
-import { supportedLanguages } from '../api/language'
-import type { LanguageInfo, LanguageProgress as LanguageProgressRow, PartDetail, TranslationEntry } from '../api/types'
+import type { LanguageProgress as LanguageProgressRow, PartDetail, TranslationEntry } from '../api/types'
 import LanguageProgress from '../components/LanguageProgress.vue'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
@@ -24,7 +23,7 @@ const partId = Number(route.params.id)
 
 const part = ref<PartDetail | null>(null)
 const entries = ref<TranslationEntry[]>([])
-const languageList = ref<LanguageInfo[]>([])
+// 部件已有的语言列表，即语言选择器的可选范围，附带完成度用于提示哪些语言待翻译
 const languageRows = ref<LanguageProgressRow[]>([])
 const loading = ref(true)
 const loadError = ref('')
@@ -62,6 +61,18 @@ const suggesting = ref(false)
 
 const primaryLanguage = computed(() => auth.user?.primaryLanguage ?? '')
 
+// 当前工作语言可能不在部件已有语言列表中（如从其它部件切换过来），补一个仅含代码的选项保证选择器正常显示
+const languageOptions = computed<LanguageProgressRow[]>(() => {
+  const rows = languageRows.value
+  if (ui.currentLanguage && !rows.some((r) => r.code === ui.currentLanguage)) {
+    return [
+      ...rows,
+      { code: ui.currentLanguage, name: ui.currentLanguage, translatedPercent: 0, untranslatedStrings: 0, totalStrings: 0 },
+    ]
+  }
+  return rows
+})
+
 // 语言快速切换时旧请求不得覆盖新数据
 let loadSeq = 0
 
@@ -70,16 +81,14 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [partInfo, list, langs, langRows] = await Promise.all([
+    const [partInfo, list, langRows] = await Promise.all([
       partDetail(partId),
       partEntries(partId, ui.currentLanguage),
-      supportedLanguages(),
       partLanguageProgress(partId),
     ])
     if (seq !== loadSeq) return
     part.value = partInfo
     entries.value = list
-    languageList.value = langs
     languageRows.value = langRows
     // 默认选中第一条未翻译条目，与列表的未翻译靠前排序保持一致
     const first = list.find((e) => !e.target) ?? list[0]
@@ -269,8 +278,11 @@ async function submitSuggestion(): Promise<boolean> {
               class="translate__lang-select"
               @change="changeLanguage"
             >
-              <a-option v-for="lang in languageList" :key="lang.code" :value="lang.code">
-                {{ lang.name }}
+              <a-option v-for="row in languageOptions" :key="row.code" :value="row.code">
+                <div class="translate__lang-option">
+                  <span>{{ row.name }}</span>
+                  <span class="translate__lang-percent">{{ row.translatedPercent }}%</span>
+                </div>
               </a-option>
             </a-select>
             <a-popover title="各语言完成情况" position="br" :content-style="{ width: '360px' }">
@@ -381,7 +393,18 @@ async function submitSuggestion(): Promise<boolean> {
   }
 
   &__lang-select {
-    width: 200px;
+    width: 240px;
+  }
+
+  &__lang-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  &__lang-percent {
+    color: rgb(var(--success-6));
   }
 
   &__panel {
