@@ -13,6 +13,13 @@ export function followedProjects(): Promise<ProjectSummary[]> {
   return get<ProjectSummary[]>('/projects/followed')
 }
 
+// 站点全部项目的排序维度
+export type ProjectSort = 'name' | 'creator' | 'activity'
+
+export function siteProjects(sort: ProjectSort): Promise<ProjectSummary[]> {
+  return get<ProjectSummary[]>(`/projects?sort=${sort}`)
+}
+
 // 进度统计与当前工作语言挂钩，切换语言需重新拉取
 export function followedProgress(language: string): Promise<ProjectProgress[]> {
   return get<ProjectProgress[]>(`/projects/followed/progress?lang=${encodeURIComponent(language)}`)

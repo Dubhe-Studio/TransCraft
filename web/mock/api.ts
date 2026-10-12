@@ -13,9 +13,11 @@ import type {
   PartInput,
   PartProgress,
   ProjectDetail,
+  ProjectGroup,
   ProjectMember,
   ProjectProgress,
   ProjectSummary,
+  SiteGroup,
   SiteLinks,
   TranslationEntry,
   UserProfile,
@@ -83,6 +85,8 @@ const projects: ProjectDetail[] = [
     name: 'Create',
     namespace: 'create',
     description: '机械动力：传动与自动化的美学',
+    createdBy: 'translator',
+    lastContributionAt: '2026-10-10T15:20:00+08:00',
     repoUrl: 'https://github.com/Creators-of-Create/Create',
     branch: 'main',
     forkOwner: '',
@@ -97,6 +101,8 @@ const projects: ProjectDetail[] = [
     name: "Farmer's Delight",
     namespace: 'farmersdelight',
     description: '农夫乐事：更丰富的农耕与烹饪',
+    createdBy: 'translator',
+    lastContributionAt: '2026-09-28T09:00:00+08:00',
     repoUrl: 'https://github.com/vectorwing/FarmersDelight',
     branch: '1.20',
     forkOwner: '',
@@ -111,6 +117,8 @@ const projects: ProjectDetail[] = [
     name: 'Applied Energistics 2',
     namespace: 'ae2',
     description: '应用能源 2：数字化物品存储网络',
+    createdBy: 'carol',
+    lastContributionAt: '2026-10-11T21:40:00+08:00',
     repoUrl: 'https://github.com/AppliedEnergistics/Applied-Energistics-2',
     branch: 'main',
     forkOwner: 'translator',
@@ -127,6 +135,8 @@ const followed: ProjectSummary[] = projects.map((p) => ({
   name: p.name,
   namespace: p.namespace,
   description: p.description,
+  createdBy: p.createdBy,
+  lastContributionAt: p.lastContributionAt,
 }))
 
 const parts: Part[] = [
@@ -274,6 +284,19 @@ const entries: Record<number, MockEntry[]> = {
 
 // 编辑器保存的译文按 部件|语言|键 存放，覆盖条目初始译文
 const savedTargets: Record<string, string> = {}
+
+// 批准状态与建议计数同样按 部件|语言|键 存放
+const savedApproved: Record<string, boolean> = {}
+const suggestionCounts: Record<string, number> = {}
+
+// 项目 3 预置审校组并含当前演示用户，用于演示译者经用户组获得批准权限
+const projectGroupData: Record<number, ProjectGroup[]> = {
+  3: [{ id: 1, projectId: 3, name: '审校', permissions: ['approve'], members: ['translator'] }],
+}
+
+const siteGroupData: SiteGroup[] = [
+  { id: 1, name: '站点审校', members: ['translator', 'alice'] },
+]
 
 const mockUsers: AdminUser[] = [
   { ...demoUser, email: 'translator@example.com', createdAt: '2026-08-01T09:00:00+08:00' },
@@ -498,6 +521,28 @@ async function route(
     sendJson(res, 200, followedProgress)
     return
   }
+  if (req.method === 'GET' && path === '/api/projects') {
+    if (!requireAuth(req, res)) return
+    const sort = queryParam(req, 'sort')
+    const list = projects.map((p) => ({
+      id: p.id,
+      name: p.name,
+      namespace: p.namespace,
+      description: p.description,
+      createdBy: p.createdBy,
+      lastContributionAt: p.lastContributionAt,
+    }))
+    if (sort === 'creator') {
+      list.sort((a, b) => a.createdBy.localeCompare(b.createdBy) || a.name.localeCompare(b.name))
+    } else if (sort === 'activity') {
+      // 无贡献记录的项目排在最后
+      list.sort((a, b) => (b.lastContributionAt || '').localeCompare(a.lastContributionAt || ''))
+    } else {
+      list.sort((a, b) => a.name.localeCompare(b.name))
+    }
+    sendJson(res, 200, list)
+    return
+  }
   if (req.method === 'POST' && path === '/api/projects') {
     if (!requireAuth(req, res)) return
     const body = await readBody(req)
@@ -512,6 +557,8 @@ async function route(
       name: body.name,
       namespace: body.namespace,
       description: typeof body.description === 'string' ? body.description : '',
+      createdBy: sessionUser.username,
+      lastContributionAt: '',
       repoUrl: body.repoUrl,
       branch: typeof body.branch === 'string' && body.branch ? body.branch : 'main',
       forkOwner: typeof body.forkOwner === 'string' ? body.forkOwner : '',
@@ -523,7 +570,14 @@ async function route(
       role: 'owner',
     }
     projects.push(created)
-    followed.push({ id: created.id, name: created.name, namespace: created.namespace, description: created.description })
+    followed.push({
+      id: created.id,
+      name: created.name,
+      namespace: created.namespace,
+      description: created.description,
+      createdBy: created.createdBy,
+      lastContributionAt: created.lastContributionAt,
+    })
     sendJson(res, 200, created)
     return
   }
@@ -650,9 +704,14 @@ async function route(
       sendJson(res, 404, { message: '部件不存在' })
       return
     }
+    const myRole = (members[found.projectId] ?? []).find((m) => m.username === sessionUser.username)?.role
+    const inApproveGroup = (projectGroupData[found.projectId] ?? []).some(
+      (g) => g.permissions.includes('approve') && g.members.includes(sessionUser.username),
+    )
     const detail: PartDetail = {
       ...found,
       projectName: projects.find((p) => p.id === found.projectId)?.name ?? '',
+      canApprove: myRole === 'owner' || myRole === 'maintainer' || inApproveGroup,
     }
     sendJson(res, 200, detail)
     return
@@ -664,10 +723,13 @@ async function route(
     const partId = Number(entriesMatch[1])
     const lang = queryParam(req, 'lang')
     const list = entries[partId] ?? []
+    // 第一语言对照文本取用户主语言（演示用户为 zh_cn）的既有译文
     const result: TranslationEntry[] = list.map((entry) => ({
       key: entry.key,
       source: entry.source,
+      primary: savedTargets[`${partId}|zh_cn|${entry.key}`] ?? entry.zhCn,
       target: savedTargets[`${partId}|${lang}|${entry.key}`] ?? (lang === 'zh_cn' ? entry.zhCn : ''),
+      approved: savedApproved[`${partId}|${lang}|${entry.key}`] ?? false,
     }))
     sendJson(res, 200, result)
     return
@@ -689,6 +751,105 @@ async function route(
       return
     }
     savedTargets[`${partId}|${lang}|${key}`] = body.text
+    // 保存译文视为一次贡献，刷新项目的最后贡献时间供活动排序演示
+    const ownerPart = parts.find((p) => p.id === partId)
+    const ownerProject = projects.find((p) => p.id === ownerPart?.projectId)
+    if (ownerProject) {
+      ownerProject.lastContributionAt = new Date().toISOString()
+      const followedItem = followed.find((p) => p.id === ownerProject.id)
+      if (followedItem) {
+        followedItem.lastContributionAt = ownerProject.lastContributionAt
+      }
+    }
+    sendJson(res, 204, undefined)
+    return
+  }
+
+  const approveMatch = /^\/api\/parts\/(\d+)\/entries\/([^/]+)\/approve$/.exec(path)
+  if (req.method === 'POST' && approveMatch) {
+    if (!requireAuth(req, res)) return
+    const partId = Number(approveMatch[1])
+    const key = decodeURIComponent(approveMatch[2])
+    const lang = queryParam(req, 'lang')
+    if (!(entries[partId] ?? []).some((entry) => entry.key === key)) {
+      sendJson(res, 404, { message: '条目不存在' })
+      return
+    }
+    savedApproved[`${partId}|${lang}|${key}`] = true
+    sendJson(res, 204, undefined)
+    return
+  }
+
+  const suggestionMatch = /^\/api\/parts\/(\d+)\/entries\/([^/]+)\/suggestions$/.exec(path)
+  if (req.method === 'POST' && suggestionMatch) {
+    if (!requireAuth(req, res)) return
+    const partId = Number(suggestionMatch[1])
+    const key = decodeURIComponent(suggestionMatch[2])
+    const lang = queryParam(req, 'lang')
+    const body = await readBody(req)
+    if (typeof body.text !== 'string' || !body.text) {
+      sendJson(res, 400, { message: '缺少建议内容' })
+      return
+    }
+    if (!(entries[partId] ?? []).some((entry) => entry.key === key)) {
+      sendJson(res, 404, { message: '条目不存在' })
+      return
+    }
+    const countKey = `${partId}|${lang}|${key}`
+    suggestionCounts[countKey] = (suggestionCounts[countKey] ?? 0) + 1
+    sendJson(res, 204, undefined)
+    return
+  }
+
+  const projectGroupsMatch = /^\/api\/projects\/(\d+)\/groups$/.exec(path)
+  if (req.method === 'GET' && projectGroupsMatch) {
+    if (!requireAuth(req, res)) return
+    sendJson(res, 200, projectGroupData[Number(projectGroupsMatch[1])] ?? [])
+    return
+  }
+  if (req.method === 'POST' && projectGroupsMatch) {
+    if (!requireAuth(req, res)) return
+    const projectId = Number(projectGroupsMatch[1])
+    const body = await readBody(req)
+    if (typeof body.name !== 'string' || !body.name || !Array.isArray(body.permissions) || !Array.isArray(body.members)) {
+      sendJson(res, 400, { message: '用户组字段不完整' })
+      return
+    }
+    const list = projectGroupData[projectId] ?? []
+    const maxId = Math.max(0, ...Object.values(projectGroupData).flat().map((g) => g.id))
+    list.push({ id: maxId + 1, projectId, name: body.name, permissions: body.permissions as string[], members: body.members as string[] })
+    projectGroupData[projectId] = list
+    sendJson(res, 200, list)
+    return
+  }
+
+  const projectGroupMatch = /^\/api\/projects\/(\d+)\/groups\/(\d+)$/.exec(path)
+  if (req.method === 'PUT' && projectGroupMatch) {
+    if (!requireAuth(req, res)) return
+    const projectId = Number(projectGroupMatch[1])
+    const groupId = Number(projectGroupMatch[2])
+    const list = projectGroupData[projectId] ?? []
+    const found = list.find((g) => g.id === groupId)
+    if (!found) {
+      sendJson(res, 404, { message: '用户组不存在' })
+      return
+    }
+    const body = await readBody(req)
+    if (typeof body.name !== 'string' || !body.name || !Array.isArray(body.permissions) || !Array.isArray(body.members)) {
+      sendJson(res, 400, { message: '用户组字段不完整' })
+      return
+    }
+    found.name = body.name
+    found.permissions = body.permissions as string[]
+    found.members = body.members as string[]
+    sendJson(res, 200, list)
+    return
+  }
+  if (req.method === 'DELETE' && projectGroupMatch) {
+    if (!requireAuth(req, res)) return
+    const projectId = Number(projectGroupMatch[1])
+    const groupId = Number(projectGroupMatch[2])
+    projectGroupData[projectId] = (projectGroupData[projectId] ?? []).filter((g) => g.id !== groupId)
     sendJson(res, 204, undefined)
     return
   }
@@ -746,6 +907,52 @@ async function route(
     const index = inviteList.findIndex((i) => i.code === code)
     if (index >= 0) {
       inviteList.splice(index, 1)
+    }
+    sendJson(res, 204, undefined)
+    return
+  }
+
+  if (req.method === 'GET' && path === '/api/admin/groups') {
+    if (!requireAdmin(req, res)) return
+    sendJson(res, 200, siteGroupData)
+    return
+  }
+  if (req.method === 'POST' && path === '/api/admin/groups') {
+    if (!requireAdmin(req, res)) return
+    const body = await readBody(req)
+    if (typeof body.name !== 'string' || !body.name || !Array.isArray(body.members)) {
+      sendJson(res, 400, { message: '用户组字段不完整' })
+      return
+    }
+    const maxId = Math.max(0, ...siteGroupData.map((g) => g.id))
+    siteGroupData.push({ id: maxId + 1, name: body.name, members: body.members as string[] })
+    sendJson(res, 200, siteGroupData)
+    return
+  }
+
+  const siteGroupMatch = /^\/api\/admin\/groups\/(\d+)$/.exec(path)
+  if (req.method === 'PUT' && siteGroupMatch) {
+    if (!requireAdmin(req, res)) return
+    const found = siteGroupData.find((g) => g.id === Number(siteGroupMatch[1]))
+    if (!found) {
+      sendJson(res, 404, { message: '用户组不存在' })
+      return
+    }
+    const body = await readBody(req)
+    if (typeof body.name !== 'string' || !body.name || !Array.isArray(body.members)) {
+      sendJson(res, 400, { message: '用户组字段不完整' })
+      return
+    }
+    found.name = body.name
+    found.members = body.members as string[]
+    sendJson(res, 200, siteGroupData)
+    return
+  }
+  if (req.method === 'DELETE' && siteGroupMatch) {
+    if (!requireAdmin(req, res)) return
+    const index = siteGroupData.findIndex((g) => g.id === Number(siteGroupMatch[1]))
+    if (index >= 0) {
+      siteGroupData.splice(index, 1)
     }
     sendJson(res, 204, undefined)
     return

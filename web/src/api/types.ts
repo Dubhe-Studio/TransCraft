@@ -24,6 +24,9 @@ export interface ProjectSummary {
   name: string
   namespace: string
   description: string
+  createdBy: string
+  // 最后一次有译文变更的时间，空串表示尚无贡献
+  lastContributionAt: string
 }
 
 // 项目与部件共用的翻译进度统计口径
@@ -92,6 +95,8 @@ export interface PartInput {
 
 export interface PartDetail extends Part {
   projectName: string
+  // 当前用户是否可批准译文：所有者/维护者或含批准权限的项目用户组成员
+  canApprove: boolean
 }
 
 export interface PartProgress extends Part, ProgressStats {}
@@ -103,11 +108,40 @@ export interface ProjectMember {
   role: ProjectRole
 }
 
-// 翻译条目：source 为参考语言原文，target 为当前语言译文，空串表示未翻译
+// 翻译条目：source 为模板语言原文，primary 为当前用户第一语言的既有译文（对照用，空串表示无），target 为当前语言译文，空串表示未翻译
 export interface TranslationEntry {
   key: string
   source: string
+  primary: string
   target: string
+  approved: boolean
+}
+
+// 项目级用户组，permissions 目前只有 'approve'（批准译文）
+export interface ProjectGroup {
+  id: number
+  projectId: number
+  name: string
+  permissions: string[]
+  members: string[]
+}
+
+export interface ProjectGroupInput {
+  name: string
+  permissions: string[]
+  members: string[]
+}
+
+// 站点级用户组，第一阶段只做成员归组展示，不参与权限判定
+export interface SiteGroup {
+  id: number
+  name: string
+  members: string[]
+}
+
+export interface SiteGroupInput {
+  name: string
+  members: string[]
 }
 
 export interface UserPublicProfile {
