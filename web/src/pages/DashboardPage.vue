@@ -156,7 +156,7 @@ function formatNumber(value: number): string {
     }
 
     &--number {
-      color: rgb(var(--success-6));
+      color: var(--color-text-1);
     }
   }
 
