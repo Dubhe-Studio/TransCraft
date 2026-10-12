@@ -3,7 +3,7 @@
 // 数据口径与 src/api 下各模块约定的前后端契约保持一致。
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Connect, Plugin } from 'vite'
-import type { LanguageInfo, LoginResult, ProjectSummary, UserProfile } from '../src/api/types.ts'
+import type { LanguageInfo, LoginResult, ProjectProgress, ProjectSummary, UserProfile } from '../src/api/types.ts'
 
 // 使用 admin 角色以便开发时能看到全部菜单项
 const demoUser: UserProfile = {
@@ -64,6 +64,43 @@ const followed: ProjectSummary[] = [
   { id: 1, name: 'Create', namespace: 'create', description: '机械动力：传动与自动化的美学' },
   { id: 2, name: "Farmer's Delight", namespace: 'farmersdelight', description: '农夫乐事：更丰富的农耕与烹饪' },
   { id: 3, name: 'Applied Energistics 2', namespace: 'ae2', description: '应用能源 2：数字化物品存储网络' },
+]
+
+// 模拟数据不区分语言：真实后端按语言统计，这里所有语言返回同一份进度
+const followedProgress: ProjectProgress[] = [
+  {
+    ...followed[0],
+    translatedPercent: 50,
+    incompleteStrings: 32203,
+    incompleteWords: 219570,
+    incompleteChars: 1383199,
+    untranslatedStrings: 28826,
+    failingChecks: 14383,
+    suggestions: 26112,
+    comments: 0,
+  },
+  {
+    ...followed[1],
+    translatedPercent: 100,
+    incompleteStrings: 0,
+    incompleteWords: 0,
+    incompleteChars: 0,
+    untranslatedStrings: 0,
+    failingChecks: 0,
+    suggestions: 0,
+    comments: 0,
+  },
+  {
+    ...followed[2],
+    translatedPercent: 33,
+    incompleteStrings: 1004,
+    incompleteWords: 4000,
+    incompleteChars: 26028,
+    untranslatedStrings: 1004,
+    failingChecks: 13,
+    suggestions: 946,
+    comments: 0,
+  },
 ]
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
@@ -184,6 +221,15 @@ async function route(
       return
     }
     sendJson(res, 200, followed)
+    return
+  }
+  if (req.method === 'GET' && path === '/api/projects/followed/progress') {
+    if (!hasToken(req)) {
+      req.resume()
+      sendJson(res, 401, { message: '未登录或会话已过期' })
+      return
+    }
+    sendJson(res, 200, followedProgress)
     return
   }
 
