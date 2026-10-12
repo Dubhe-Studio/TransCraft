@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { createPart } from '../api/part'
 import { followedProjects, projectDetail } from '../api/project'
+import { validSlug, SLUG_MESSAGE } from '../slug'
 import type { PartInput, ProjectDetail, ProjectSummary } from '../api/types'
 
 const router = useRouter()
@@ -15,6 +16,7 @@ const selectedProject = ref<ProjectDetail | null>(null)
 
 const form = reactive<PartInput>({
   projectId: 0,
+  slug: '',
   name: '',
   namespace: '',
   repoUrl: '',
@@ -71,10 +73,22 @@ onMounted(async () => {
 })
 
 async function submit() {
+  const slug = form.slug.trim()
+  if (!validSlug(slug)) {
+    Message.error(`地址标识${SLUG_MESSAGE}`)
+    return
+  }
+  // 跳转部件页需要项目 slug，所属项目详情未就绪时不允许提交
+  const project = selectedProject.value
+  if (!project) {
+    Message.error('项目配置尚未加载完成，请稍后重试')
+    return
+  }
   submitting.value = true
   try {
     await createPart({
       ...form,
+      slug,
       name: form.name.trim(),
       namespace: form.namespace.trim(),
       repoUrl: form.repoUrl.trim(),
@@ -85,7 +99,10 @@ async function submit() {
       templatePath: templatePathSync.value ? '' : form.templatePath.trim(),
     })
     Message.success('部件创建成功')
-    router.push({ name: 'project-detail', params: { id: form.projectId } })
+    router.push({
+      name: 'part-detail',
+      params: { slug: project.slug, partSlug: slug },
+    })
   } catch (error) {
     console.error('创建部件失败:', error)
     Message.error(error instanceof Error ? error.message : '创建失败')
@@ -119,6 +136,9 @@ async function submit() {
       </a-form-item>
       <a-form-item field="name" label="部件名称" required :rules="[{ required: true, message: '部件名称不能为空' }]">
         <a-input v-model="form.name" placeholder="例如 Create 本体" allow-clear />
+      </a-form-item>
+      <a-form-item field="slug" label="地址标识" required :extra="SLUG_MESSAGE">
+        <a-input v-model="form.slug" placeholder="例如 dev-1.21.1" allow-clear />
       </a-form-item>
       <a-form-item field="namespace" label="命名空间" required :rules="[{ required: true, message: '命名空间不能为空' }]">
         <a-input v-model="form.namespace" placeholder="例如 create" allow-clear />

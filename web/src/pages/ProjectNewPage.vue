@@ -1,9 +1,10 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import { supportedLanguages } from '../api/language'
 import { createProject } from '../api/project'
+import { validSlug, SLUG_MESSAGE } from '../slug'
 import type { LanguageInfo, ProjectInput } from '../api/types'
 
 const router = useRouter()
@@ -12,6 +13,7 @@ const languageList = ref<LanguageInfo[]>([])
 
 const form = reactive<ProjectInput>({
   name: '',
+  slug: '',
   namespace: '',
   description: '',
   fileMask: '',
@@ -31,11 +33,16 @@ onMounted(async () => {
 })
 
 async function submit() {
+  const slug = form.slug.trim()
+  if (!validSlug(slug)) {
+    Message.error(`地址标识${SLUG_MESSAGE}`)
+    return
+  }
   submitting.value = true
   try {
-    const created = await createProject({ ...form })
+    const created = await createProject({ ...form, slug })
     Message.success('项目创建成功')
-    router.push({ name: 'project-detail', params: { id: created.id } })
+    router.push({ name: 'project-detail', params: { slug: created.slug } })
   } catch (error) {
     console.error('创建项目失败:', error)
     Message.error(error instanceof Error ? error.message : '创建失败')
@@ -52,6 +59,9 @@ async function submit() {
     <a-form :model="form" layout="vertical" class="project-new__form" @submit-success="submit">
       <a-form-item field="name" label="项目名称" required :rules="[{ required: true, message: '项目名称不能为空' }]">
         <a-input v-model="form.name" placeholder="例如 Create" allow-clear />
+      </a-form-item>
+      <a-form-item field="slug" label="地址标识" required :extra="SLUG_MESSAGE">
+        <a-input v-model="form.slug" placeholder="例如 create" allow-clear />
       </a-form-item>
       <a-form-item field="namespace" label="命名空间" required :rules="[{ required: true, message: '命名空间不能为空' }]">
         <a-input v-model="form.namespace" placeholder="例如 create" allow-clear />

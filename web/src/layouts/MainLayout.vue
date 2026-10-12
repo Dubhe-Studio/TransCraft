@@ -123,7 +123,7 @@ onMounted(async () => {
               <a-doption
                 v-for="project in followed"
                 :key="project.id"
-                @click="router.push({ name: 'project-detail', params: { id: project.id } })"
+                @click="router.push({ name: 'project-detail', params: { slug: project.slug } })"
               >
                 {{ project.name }}
               </a-doption>

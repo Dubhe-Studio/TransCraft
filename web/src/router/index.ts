@@ -9,6 +9,8 @@ import DashboardPage from '../pages/DashboardPage.vue'
 import ProjectNewPage from '../pages/ProjectNewPage.vue'
 import ProjectDetailPage from '../pages/ProjectDetailPage.vue'
 import ComponentNewPage from '../pages/ComponentNewPage.vue'
+import PartDetailPage from '../pages/PartDetailPage.vue'
+import PartLanguagePage from '../pages/PartLanguagePage.vue'
 import PartTranslatePage from '../pages/PartTranslatePage.vue'
 import SettingsPage from '../pages/SettingsPage.vue'
 import UserHomePage from '../pages/UserHomePage.vue'
@@ -39,9 +41,12 @@ export const router = createRouter({
         { path: 'dashboard', name: 'dashboard', component: DashboardPage, meta: { title: 'Dashboard' } },
         { path: 'projects/new', name: 'project-new', component: ProjectNewPage, meta: { title: '添加项目' } },
         { path: 'projects', name: 'projects', component: ProjectsPage, meta: { title: '全部项目' } },
-        { path: 'projects/:id', name: 'project-detail', component: ProjectDetailPage, meta: { title: '项目详情' } },
+        { path: 'projects/:slug', name: 'project-detail', component: ProjectDetailPage, meta: { title: '项目详情' } },
         { path: 'components/new', name: 'component-new', component: ComponentNewPage, meta: { title: '添加部件' } },
-        { path: 'parts/:id/translate', name: 'part-translate', component: PartTranslatePage, meta: { title: '翻译' } },
+        // 部件与语言页面以 项目 slug + 部件 slug + 语言段 三级地址寻址，语言段形如 zh-CN
+        { path: 'projects/:slug/parts/:partSlug', name: 'part-detail', component: PartDetailPage, meta: { title: '部件详情' } },
+        { path: 'projects/:slug/parts/:partSlug/:lang', name: 'part-language', component: PartLanguagePage, meta: { title: '语言进度' } },
+        { path: 'projects/:slug/parts/:partSlug/:lang/translate', name: 'part-translate', component: PartTranslatePage, meta: { title: '翻译' } },
         { path: 'settings', name: 'settings', component: SettingsPage, meta: { title: '设置' } },
         { path: 'users/:name', name: 'user-home', component: UserHomePage, meta: { title: '用户主页' } },
         { path: 'admin', name: 'admin', component: AdminPage, meta: { title: '管理', requiresAdmin: true } },

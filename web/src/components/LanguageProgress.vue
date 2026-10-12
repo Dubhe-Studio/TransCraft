@@ -1,9 +1,15 @@
 <script setup lang="ts">
 // 项目与部件页共用的各语言完成情况列表：语言名 + 进度条 + 未完成条数
+// link 为真时每行可点击，由父级在 row-click 中决定跳转目标
 import type { LanguageProgress } from '../api/types'
 
 defineProps<{
   rows: LanguageProgress[]
+  link?: boolean
+}>()
+
+const emit = defineEmits<{
+  rowClick: [row: LanguageProgress]
 }>()
 
 function formatNumber(value: number): string {
@@ -14,7 +20,13 @@ function formatNumber(value: number): string {
 <template>
   <div class="language-progress">
     <a-empty v-if="rows.length === 0" description="暂无语言进度数据" />
-    <div v-for="row in rows" :key="row.code" class="language-progress__row">
+    <div
+      v-for="row in rows"
+      :key="row.code"
+      class="language-progress__row"
+      :class="{ 'language-progress__row--link': link }"
+      @click="link && emit('rowClick', row)"
+    >
       <div class="language-progress__head">
         <span class="language-progress__name">{{ row.name }}</span>
         <a-typography-text type="secondary" class="language-progress__code" code>{{ row.code }}</a-typography-text>
@@ -37,6 +49,17 @@ function formatNumber(value: number): string {
 .language-progress {
   &__row {
     padding: 6px 0;
+
+    &--link {
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 6px 8px;
+      margin: 0 -8px;
+
+      &:hover {
+        background: var(--color-fill-2);
+      }
+    }
   }
 
   &__head {

@@ -32,7 +32,7 @@ function changeSort(value: ProjectSort) {
 }
 
 function openProject(project: ProjectSummary) {
-  router.push({ name: 'project-detail', params: { id: project.id } })
+  router.push({ name: 'project-detail', params: { slug: project.slug } })
 }
 
 // 后端时间为 UTC ISO 串，转成浏览器本地日期展示，避免直接截断字符串导致日期偏差

@@ -61,7 +61,7 @@ onMounted(load)
         <a-empty v-if="profile.followed.length === 0" description="还没有关注的项目" />
         <a-list v-else :data="profile.followed" :bordered="false">
           <template #item="{ item }">
-            <a-list-item class="user-home__project" @click="router.push({ name: 'project-detail', params: { id: item.id } })">
+            <a-list-item class="user-home__project" @click="router.push({ name: 'project-detail', params: { slug: item.slug } })">
               <a-list-item-meta :title="item.name" :description="item.description">
                 <template #avatar>
                   <icon-folder class="user-home__folder" />

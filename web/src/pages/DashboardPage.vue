@@ -38,6 +38,13 @@ async function load() {
 watch(() => ui.currentLanguage, load)
 
 onMounted(load)
+
+// 表格插槽只暴露 ProgressRow，地址标识从完整行数据里按 id 取回
+function openProject(row: ProgressRow) {
+  const project = projects.value.find((p) => p.id === row.id)
+  if (!project) return
+  router.push({ name: 'project-detail', params: { slug: project.slug } })
+}
 </script>
 
 <template>
@@ -63,7 +70,7 @@ onMounted(load)
         v-else
         :rows="projects"
         name-label="项目"
-        @row-click="(row: ProgressRow) => router.push({ name: 'project-detail', params: { id: row.id } })"
+        @row-click="openProject"
       />
     </a-spin>
   </div>

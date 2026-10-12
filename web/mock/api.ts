@@ -3,15 +3,18 @@
 // 数据口径与 src/api 下各模块约定的前后端契约保持一致。
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Connect, Plugin } from 'vite'
+import { SLUG_MAX_LENGTH, SLUG_PATTERN } from '../src/slug.js'
 import type {
   AdminUser,
   InviteCode,
   LanguageInfo,
+  LanguageMember,
   LanguageProgress,
   LoginResult,
   Part,
   PartDetail,
   PartInput,
+  PartMember,
   PartProgress,
   ProjectDetail,
   ProjectGroup,
@@ -84,6 +87,7 @@ const languages: LanguageInfo[] = [
 const projects: ProjectDetail[] = [
   {
     id: 1,
+    slug: 'create',
     name: 'Create',
     namespace: 'create',
     description: '机械动力：传动与自动化的美学',
@@ -96,6 +100,7 @@ const projects: ProjectDetail[] = [
   },
   {
     id: 2,
+    slug: 'farmers-delight',
     name: "Farmer's Delight",
     namespace: 'farmersdelight',
     description: '农夫乐事：更丰富的农耕与烹饪',
@@ -108,6 +113,7 @@ const projects: ProjectDetail[] = [
   },
   {
     id: 3,
+    slug: 'ae2',
     name: 'Applied Energistics 2',
     namespace: 'ae2',
     description: '应用能源 2：数字化物品存储网络',
@@ -122,6 +128,7 @@ const projects: ProjectDetail[] = [
 
 const followed: ProjectSummary[] = projects.map((p) => ({
   id: p.id,
+  slug: p.slug,
   name: p.name,
   namespace: p.namespace,
   description: p.description,
@@ -133,6 +140,7 @@ const parts: Part[] = [
   {
     id: 10,
     projectId: 1,
+    slug: 'dev-1.21.1',
     name: 'Create 本体',
     namespace: 'create',
     repoUrl: 'https://github.com/Creators-of-Create/Create',
@@ -146,6 +154,7 @@ const parts: Part[] = [
   {
     id: 20,
     projectId: 2,
+    slug: 'main',
     name: "Farmer's Delight 本体",
     namespace: 'farmersdelight',
     repoUrl: 'https://github.com/vectorwing/FarmersDelight',
@@ -158,6 +167,7 @@ const parts: Part[] = [
   {
     id: 30,
     projectId: 3,
+    slug: 'release-2',
     name: 'AE2 本体',
     namespace: 'ae2',
     repoUrl: 'https://github.com/AppliedEnergistics/Applied-Energistics-2',
@@ -282,6 +292,39 @@ const members: Record<number, ProjectMember[]> = {
     { username: 'carol', displayName: 'Carol', avatarUrl: '', role: 'owner' },
     { username: 'translator', displayName: '示例译者', avatarUrl: '', role: 'translator' },
   ],
+}
+
+// 部件级成员，键为部件 id；未列出的用户按项目角色参与
+const partMembers: Record<number, PartMember[]> = {
+  10: [
+    { username: 'dev-li', displayName: '李开发', avatarUrl: '', role: 'maintainer' },
+    { username: 'alice', displayName: 'Alice', avatarUrl: '', role: 'translator' },
+  ],
+  30: [{ username: 'translator', displayName: '示例译者', avatarUrl: '', role: 'maintainer' }],
+}
+
+// 语言级成员，键为 部件id|语言代码；未配置的语言沿用部件/项目成员
+const languageMembers: Record<string, LanguageMember[]> = {
+  '10|zh_cn': [
+    { username: 'alice', displayName: 'Alice', avatarUrl: '', role: 'proofreader' },
+    { username: 'bob', displayName: 'Bob', avatarUrl: '', role: 'translator' },
+  ],
+  '10|ja_jp': [{ username: 'alice', displayName: 'Alice', avatarUrl: '', role: 'translator' }],
+}
+
+// slug 规则与前端 src/slug.ts 共用同一口径，避免规则调整时两边漂移
+function validSlug(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= SLUG_MAX_LENGTH && SLUG_PATTERN.test(value)
+}
+
+// 项目与部件详情接口同时接受数字 id 与 slug，供前端按地址段解析
+function projectByKey(key: string): ProjectDetail | undefined {
+  return projects.find((p) => p.slug === key || String(p.id) === key)
+}
+
+function partBySlugs(projectSlug: string, partSlug: string): Part | undefined {
+  const project = projects.find((p) => p.slug === projectSlug)
+  return project ? parts.find((p) => p.projectId === project.id && p.slug === partSlug) : undefined
 }
 
 // 条目以英文为参考语言原文，zhCn 为简体中文译文，空串表示该条未翻译
@@ -585,6 +628,7 @@ async function route(
     const sort = queryParam(req, 'sort')
     const list = projects.map((p) => ({
       id: p.id,
+      slug: p.slug,
       name: p.name,
       namespace: p.namespace,
       description: p.description,
@@ -614,8 +658,17 @@ async function route(
       sendJson(res, 400, { message: '项目名称与命名空间不能为空' })
       return
     }
+    if (!validSlug(body.slug)) {
+      sendJson(res, 400, { message: '地址标识只能包含小写字母、数字、点与连字符' })
+      return
+    }
+    if (projects.some((p) => p.slug === body.slug)) {
+      sendJson(res, 409, { message: '地址标识已被占用' })
+      return
+    }
     const created: ProjectDetail = {
       id: Math.max(...projects.map((p) => p.id)) + 1,
+      slug: body.slug,
       name: body.name,
       namespace: body.namespace,
       description: typeof body.description === 'string' ? body.description : '',
@@ -630,6 +683,7 @@ async function route(
     projects.push(created)
     followed.push({
       id: created.id,
+      slug: created.slug,
       name: created.name,
       namespace: created.namespace,
       description: created.description,
@@ -640,10 +694,10 @@ async function route(
     return
   }
 
-  const projectMatch = /^\/api\/projects\/(\d+)$/.exec(path)
+  const projectMatch = /^\/api\/projects\/([^/]+)$/.exec(path)
   if (projectMatch && req.method === 'GET') {
     if (!requireAuth(req, res)) return
-    const found = projects.find((p) => p.id === Number(projectMatch[1]))
+    const found = projectByKey(projectMatch[1])
     if (!found) {
       sendJson(res, 404, { message: '项目不存在' })
       return
@@ -651,9 +705,11 @@ async function route(
     sendJson(res, 200, found)
     return
   }
-  if (projectMatch && req.method === 'PUT') {
+  // 变更接口只按数字 id 寻址，slug 仅用于详情查询，与真实接口契约一致
+  const projectPutMatch = /^\/api\/projects\/(\d+)$/.exec(path)
+  if (projectPutMatch && req.method === 'PUT') {
     if (!requireAuth(req, res)) return
-    const found = projects.find((p) => p.id === Number(projectMatch[1]))
+    const found = projects.find((p) => p.id === Number(projectPutMatch[1]))
     if (!found) {
       sendJson(res, 404, { message: '项目不存在' })
       return
@@ -664,6 +720,17 @@ async function route(
       sendJson(res, 400, { message: '项目名称与命名空间不能为空' })
       return
     }
+    if (body.slug !== undefined) {
+      if (!validSlug(body.slug)) {
+        sendJson(res, 400, { message: '地址标识只能包含小写字母、数字、点与连字符' })
+        return
+      }
+      if (projects.some((p) => p.id !== found.id && p.slug === body.slug)) {
+        sendJson(res, 409, { message: '地址标识已被占用' })
+        return
+      }
+      found.slug = body.slug
+    }
     found.name = body.name
     found.namespace = body.namespace
     found.description = typeof body.description === 'string' ? body.description : ''
@@ -672,6 +739,7 @@ async function route(
     found.referenceLanguage = typeof body.referenceLanguage === 'string' && body.referenceLanguage ? body.referenceLanguage : found.referenceLanguage
     const summary = followed.find((p) => p.id === found.id)
     if (summary) {
+      summary.slug = found.slug
       summary.name = found.name
       summary.namespace = found.namespace
       summary.description = found.description
@@ -680,14 +748,15 @@ async function route(
     return
   }
 
-  const projectLanguagesMatch = /^\/api\/projects\/(\d+)\/languages$/.exec(path)
+  const projectLanguagesMatch = /^\/api\/projects\/([^/]+)\/languages$/.exec(path)
   if (req.method === 'GET' && projectLanguagesMatch) {
     if (!requireAuth(req, res)) return
-    const projectId = Number(projectLanguagesMatch[1])
-    if (!projects.some((p) => p.id === projectId)) {
+    const project = projectByKey(projectLanguagesMatch[1])
+    if (!project) {
       sendJson(res, 404, { message: '项目不存在' })
       return
     }
+    const projectId = project.id
     // 项目级完成情况为项目下各部件的汇总：百分比取平均，条数取合计
     const merged = new Map<string, { name: string; percentSum: number; partCount: number; untranslated: number; total: number }>()
     for (const part of parts.filter((p) => p.projectId === projectId)) {
@@ -771,10 +840,19 @@ async function route(
       sendJson(res, 400, { message: '所属项目、部件名称、命名空间与仓库地址不能为空' })
       return
     }
+    if (!validSlug(body.slug)) {
+      sendJson(res, 400, { message: '地址标识只能包含小写字母、数字、点与连字符' })
+      return
+    }
+    if (parts.some((p) => p.projectId === body.projectId && p.slug === body.slug)) {
+      sendJson(res, 409, { message: '该项目下地址标识已被占用' })
+      return
+    }
     const input = body as unknown as PartInput
     const created: Part = {
       id: Math.max(...parts.map((p) => p.id)) + 1,
       projectId: input.projectId,
+      slug: input.slug,
       name: input.name,
       namespace: input.namespace,
       repoUrl: input.repoUrl,
@@ -824,6 +902,17 @@ async function route(
       sendJson(res, 400, { message: '部件名称、命名空间与仓库地址不能为空' })
       return
     }
+    if (body.slug !== undefined) {
+      if (!validSlug(body.slug)) {
+        sendJson(res, 400, { message: '地址标识只能包含小写字母、数字、点与连字符' })
+        return
+      }
+      if (parts.some((p) => p.id !== found.id && p.projectId === found.projectId && p.slug === body.slug)) {
+        sendJson(res, 409, { message: '该项目下地址标识已被占用' })
+        return
+      }
+      found.slug = body.slug
+    }
     found.name = body.name
     found.namespace = body.namespace
     found.repoUrl = body.repoUrl
@@ -845,6 +934,149 @@ async function route(
       return
     }
     sendJson(res, 200, languageProgressForPart(partId))
+    return
+  }
+
+  // 按地址段解析部件：详情、语言列表、成员配置都走这条 slug 路径
+  const partSlugMatch = /^\/api\/projects\/([^/]+)\/parts\/([^/]+)$/.exec(path)
+  if (req.method === 'GET' && partSlugMatch) {
+    if (!requireAuth(req, res)) return
+    const found = partBySlugs(partSlugMatch[1], partSlugMatch[2])
+    if (!found) {
+      sendJson(res, 404, { message: '部件不存在' })
+      return
+    }
+    const myRole = (members[found.projectId] ?? []).find((m) => m.username === sessionUser.username)?.role
+    const inApproveGroup = (projectGroupData[found.projectId] ?? []).some(
+      (g) => g.permissions.includes('approve') && g.members.includes(sessionUser.username),
+    )
+    const detail: PartDetail = {
+      ...found,
+      projectName: projects.find((p) => p.id === found.projectId)?.name ?? '',
+      referenceLanguage: projects.find((p) => p.id === found.projectId)?.referenceLanguage ?? '',
+      canApprove: myRole === 'owner' || myRole === 'maintainer' || inApproveGroup,
+    }
+    sendJson(res, 200, detail)
+    return
+  }
+
+  const partSlugLanguagesMatch = /^\/api\/projects\/([^/]+)\/parts\/([^/]+)\/languages$/.exec(path)
+  if (req.method === 'GET' && partSlugLanguagesMatch) {
+    if (!requireAuth(req, res)) return
+    const found = partBySlugs(partSlugLanguagesMatch[1], partSlugLanguagesMatch[2])
+    if (!found) {
+      sendJson(res, 404, { message: '部件不存在' })
+      return
+    }
+    sendJson(res, 200, languageProgressForPart(found.id))
+    return
+  }
+
+  const partMembersMatch = /^\/api\/parts\/(\d+)\/members$/.exec(path)
+  if (req.method === 'GET' && partMembersMatch) {
+    if (!requireAuth(req, res)) return
+    if (!parts.some((p) => p.id === Number(partMembersMatch[1]))) {
+      sendJson(res, 404, { message: '部件不存在' })
+      return
+    }
+    sendJson(res, 200, partMembers[Number(partMembersMatch[1])] ?? [])
+    return
+  }
+  if (req.method === 'POST' && partMembersMatch) {
+    if (!requireAuth(req, res)) return
+    const partId = Number(partMembersMatch[1])
+    if (!parts.some((p) => p.id === partId)) {
+      sendJson(res, 404, { message: '部件不存在' })
+      return
+    }
+    const body = await readBody(req)
+    const user = typeof body.username === 'string' ? mockUsers.find((u) => u.username === body.username) : undefined
+    if (!user) {
+      sendJson(res, 404, { message: '用户不存在' })
+      return
+    }
+    if (body.role !== 'maintainer' && body.role !== 'translator') {
+      sendJson(res, 400, { message: '部件成员角色只能是 maintainer 或 translator' })
+      return
+    }
+    const role = body.role
+    const list = partMembers[partId] ?? []
+    if (list.some((m) => m.username === user.username)) {
+      sendJson(res, 409, { message: '该用户已是部件成员' })
+      return
+    }
+    list.push({ username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl, role })
+    partMembers[partId] = list
+    sendJson(res, 200, list)
+    return
+  }
+
+  const removePartMemberMatch = /^\/api\/parts\/(\d+)\/members\/([^/]+)$/.exec(path)
+  if (req.method === 'DELETE' && removePartMemberMatch) {
+    if (!requireAuth(req, res)) return
+    const partId = Number(removePartMemberMatch[1])
+    if (!parts.some((p) => p.id === partId)) {
+      sendJson(res, 404, { message: '部件不存在' })
+      return
+    }
+    const name = decodeURIComponent(removePartMemberMatch[2])
+    partMembers[partId] = (partMembers[partId] ?? []).filter((m) => m.username !== name)
+    sendJson(res, 204, undefined)
+    return
+  }
+
+  const langMembersMatch = /^\/api\/parts\/(\d+)\/languages\/([a-z_]+)\/members$/.exec(path)
+  if (req.method === 'GET' && langMembersMatch) {
+    if (!requireAuth(req, res)) return
+    if (!parts.some((p) => p.id === Number(langMembersMatch[1]))) {
+      sendJson(res, 404, { message: '部件不存在' })
+      return
+    }
+    sendJson(res, 200, languageMembers[`${langMembersMatch[1]}|${langMembersMatch[2]}`] ?? [])
+    return
+  }
+  if (req.method === 'POST' && langMembersMatch) {
+    if (!requireAuth(req, res)) return
+    const partId = Number(langMembersMatch[1])
+    if (!parts.some((p) => p.id === partId)) {
+      sendJson(res, 404, { message: '部件不存在' })
+      return
+    }
+    const body = await readBody(req)
+    const user = typeof body.username === 'string' ? mockUsers.find((u) => u.username === body.username) : undefined
+    if (!user) {
+      sendJson(res, 404, { message: '用户不存在' })
+      return
+    }
+    if (body.role !== 'proofreader' && body.role !== 'translator') {
+      sendJson(res, 400, { message: '语言成员角色只能是 proofreader 或 translator' })
+      return
+    }
+    const role = body.role
+    const slotKey = `${partId}|${langMembersMatch[2]}`
+    const list = languageMembers[slotKey] ?? []
+    if (list.some((m) => m.username === user.username)) {
+      sendJson(res, 409, { message: '该用户已是该语言成员' })
+      return
+    }
+    list.push({ username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl, role })
+    languageMembers[slotKey] = list
+    sendJson(res, 200, list)
+    return
+  }
+
+  const removeLangMemberMatch = /^\/api\/parts\/(\d+)\/languages\/([a-z_]+)\/members\/([^/]+)$/.exec(path)
+  if (req.method === 'DELETE' && removeLangMemberMatch) {
+    if (!requireAuth(req, res)) return
+    const partId = Number(removeLangMemberMatch[1])
+    if (!parts.some((p) => p.id === partId)) {
+      sendJson(res, 404, { message: '部件不存在' })
+      return
+    }
+    const slotKey = `${removeLangMemberMatch[1]}|${removeLangMemberMatch[2]}`
+    const name = decodeURIComponent(removeLangMemberMatch[3])
+    languageMembers[slotKey] = (languageMembers[slotKey] ?? []).filter((m) => m.username !== name)
+    sendJson(res, 204, undefined)
     return
   }
 

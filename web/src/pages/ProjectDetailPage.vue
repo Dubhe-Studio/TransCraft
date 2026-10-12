@@ -11,7 +11,6 @@ import {
   removeMember,
   updateProject,
 } from '../api/project'
-import { updatePart } from '../api/part'
 import { supportedLanguages } from '../api/language'
 import {
   createProjectGroup,
@@ -19,10 +18,10 @@ import {
   projectGroups,
   updateProjectGroup,
 } from '../api/group'
+import { validSlug, SLUG_MESSAGE } from '../slug'
 import type {
   LanguageInfo,
   LanguageProgress as LanguageProgressRow,
-  PartInput,
   PartProgress,
   ProgressRow,
   ProjectDetail,
@@ -33,13 +32,16 @@ import type {
 } from '../api/types'
 import ProgressTable from '../components/ProgressTable.vue'
 import LanguageProgress from '../components/LanguageProgress.vue'
+import PartEditModal from '../components/PartEditModal.vue'
 import { useUiStore } from '../stores/ui'
 
 const route = useRoute()
 const router = useRouter()
 const ui = useUiStore()
 
-const projectId = Number(route.params.id)
+// 项目以地址中的 slug 定位，内部接口再按解析出的 id 调用；slug 可被设置页修改，始终从地址实时取
+const projectSlug = computed(() => String(route.params.slug))
+const projectId = ref(0)
 
 const detail = ref<ProjectDetail | null>(null)
 const partRows = ref<PartProgress[]>([])
@@ -59,18 +61,25 @@ const roleLabels: Record<ProjectRole, string> = {
   translator: '译者',
 }
 
+// 路由组件复用（关注列表连续打开两个项目、设置页改 slug）时旧请求不得覆盖新数据
+let loadSeq = 0
+
 async function load() {
+  const seq = ++loadSeq
   loading.value = true
   loadError.value = ''
   try {
-    const [project, progressRows, members, groups, langs, langRows] = await Promise.all([
-      projectDetail(projectId),
-      projectProgress(projectId, ui.currentLanguage),
-      projectMembers(projectId),
-      projectGroups(projectId),
+    const project = await projectDetail(projectSlug.value)
+    if (seq !== loadSeq) return
+    projectId.value = project.id
+    const [progressRows, members, groups, langs, langRows] = await Promise.all([
+      projectProgress(project.id, ui.currentLanguage),
+      projectMembers(project.id),
+      projectGroups(project.id),
       supportedLanguages(),
-      projectLanguageProgress(projectId),
+      projectLanguageProgress(project.id),
     ])
+    if (seq !== loadSeq) return
     detail.value = project
     partRows.value = progressRows
     memberList.value = members
@@ -79,19 +88,23 @@ async function load() {
     languageRows.value = langRows
     syncSettingsForm(project)
   } catch (error) {
+    if (seq !== loadSeq) return
     console.error('加载项目详情失败:', error)
     loadError.value = error instanceof Error ? error.message : '加载失败'
   } finally {
-    loading.value = false
+    if (seq === loadSeq) {
+      loading.value = false
+    }
   }
 }
 
 // 部件进度跟随当前工作语言变化；快速切换时旧请求不得覆盖新数据
 let partsSeq = 0
 watch(() => ui.currentLanguage, async () => {
+  if (!projectId.value) return
   const seq = ++partsSeq
   try {
-    const rows = await projectProgress(projectId, ui.currentLanguage)
+    const rows = await projectProgress(projectId.value, ui.currentLanguage)
     if (seq !== partsSeq) return
     partRows.value = rows
   } catch (error) {
@@ -102,6 +115,11 @@ watch(() => ui.currentLanguage, async () => {
 })
 
 onMounted(load)
+
+// slug 在设置页可被修改，地址变化后按新标识重取
+watch(() => route.params.slug, () => {
+  if (route.name === 'project-detail') load()
+})
 
 // 添加成员
 const addVisible = ref(false)
@@ -116,7 +134,7 @@ async function submitAddMember(): Promise<boolean> {
   }
   addSubmitting.value = true
   try {
-    memberList.value = await addMember(projectId, addForm.username, addForm.role)
+    memberList.value = await addMember(projectId.value, addForm.username, addForm.role)
     Message.success('成员已添加')
     addForm.username = ''
     addForm.role = 'translator'
@@ -132,7 +150,7 @@ async function submitAddMember(): Promise<boolean> {
 
 async function confirmRemove(member: ProjectMember) {
   try {
-    await removeMember(projectId, member.username)
+    await removeMember(projectId.value, member.username)
     memberList.value = memberList.value.filter((m) => m.username !== member.username)
     Message.success(`已移除 ${member.displayName}`)
   } catch (error) {
@@ -183,8 +201,8 @@ async function submitGroup(): Promise<boolean> {
   try {
     const editing = groupEditing.value
     groupList.value = editing
-      ? await updateProjectGroup(projectId, editing.id, input)
-      : await createProjectGroup(projectId, input)
+      ? await updateProjectGroup(projectId.value, editing.id, input)
+      : await createProjectGroup(projectId.value, input)
     Message.success(editing ? '用户组已更新' : '用户组已创建')
     return true
   } catch (error) {
@@ -198,7 +216,7 @@ async function submitGroup(): Promise<boolean> {
 
 async function confirmDeleteGroup(group: ProjectGroup) {
   try {
-    await deleteProjectGroup(projectId, group.id)
+    await deleteProjectGroup(projectId.value, group.id)
     groupList.value = groupList.value.filter((item) => item.id !== group.id)
     Message.success(`用户组 ${group.name} 已删除`)
   } catch (error) {
@@ -210,6 +228,7 @@ async function confirmDeleteGroup(group: ProjectGroup) {
 // 设置表单，随项目详情同步；VCS 与部件文件配置在部件级管理，不在项目设置中
 const settingsForm = reactive<ProjectInput>({
   name: '',
+  slug: '',
   namespace: '',
   description: '',
   fileMask: '',
@@ -220,6 +239,7 @@ const settingsSaving = ref(false)
 
 function syncSettingsForm(project: ProjectDetail) {
   settingsForm.name = project.name
+  settingsForm.slug = project.slug
   settingsForm.namespace = project.namespace
   settingsForm.description = project.description
   settingsForm.fileMask = project.fileMask
@@ -228,10 +248,19 @@ function syncSettingsForm(project: ProjectDetail) {
 }
 
 async function saveSettings() {
+  const slug = settingsForm.slug.trim()
+  if (!validSlug(slug)) {
+    Message.error(`地址标识${SLUG_MESSAGE}`)
+    return
+  }
   settingsSaving.value = true
   try {
-    detail.value = await updateProject(projectId, { ...settingsForm })
+    detail.value = await updateProject(projectId.value, { ...settingsForm, slug })
     Message.success('设置已保存')
+    // slug 改变后地址需要跟上新标识，历史记录里不留下旧地址
+    if (slug !== projectSlug.value) {
+      router.replace({ name: 'project-detail', params: { slug } })
+    }
   } catch (error) {
     console.error('保存项目设置失败:', error)
     Message.error(error instanceof Error ? error.message : '保存失败')
@@ -246,77 +275,38 @@ function changeLanguage(value: string | number | boolean | Record<string, unknow
   ui.setCurrentLanguage(String(value))
 }
 
-// 部件配置弹窗：fileMask/templatePath 为空表示从项目同步，用独立布尔承载同步开关
-const partVisible = ref(false)
-const partEditing = ref<PartProgress | null>(null)
-const partSubmitting = ref(false)
-const partForm = reactive<PartInput>({
-  projectId,
-  name: '',
-  namespace: '',
-  repoUrl: '',
-  branch: 'main',
-  forkOwner: '',
-  forkBranch: '',
-  fileMask: '',
-  templatePath: '',
-})
-const fileMaskSync = ref(true)
-const templatePathSync = ref(true)
-
+// 部件配置弹窗由 PartEditModal 承载，这里只保存编辑目标
 // 表格插槽只暴露 ProgressRow，部件的 VCS 等完整字段从 partRows 里按 id 取回
+const partEditing = ref<PartProgress | null>(null)
+
 function openEditPart(row: ProgressRow) {
   const part = partRows.value.find((p) => p.id === row.id)
   if (!part) return
   partEditing.value = part
-  partForm.name = part.name
-  partForm.namespace = part.namespace
-  partForm.repoUrl = part.repoUrl
-  partForm.branch = part.branch
-  partForm.forkOwner = part.forkOwner
-  partForm.forkBranch = part.forkBranch
-  partForm.fileMask = part.fileMask
-  partForm.templatePath = part.templatePath
-  fileMaskSync.value = part.fileMask === ''
-  templatePathSync.value = part.templatePath === ''
-  partVisible.value = true
 }
 
-// 返回是否允许关闭弹窗，校验失败或提交失败时保持弹窗打开
-async function submitPart(): Promise<boolean> {
-  const editing = partEditing.value
-  if (!editing) return false
-  const name = partForm.name.trim()
-  const namespace = partForm.namespace.trim()
-  const repoUrl = partForm.repoUrl.trim()
-  if (!name || !namespace || !repoUrl) {
-    Message.error('部件名称、命名空间与仓库地址不能为空')
-    return false
-  }
-  partSubmitting.value = true
+async function onPartSaved() {
+  // 进度行包含部件名称与地址标识等基础信息，保存后整体重取
   try {
-    await updatePart(editing.id, {
-      projectId,
-      name,
-      namespace,
-      repoUrl,
-      branch: partForm.branch.trim() || 'main',
-      forkOwner: partForm.forkOwner.trim(),
-      forkBranch: partForm.forkBranch.trim(),
-      fileMask: fileMaskSync.value ? '' : partForm.fileMask.trim(),
-      templatePath: templatePathSync.value ? '' : partForm.templatePath.trim(),
-    })
-    // 进度行包含部件名称等基础信息，保存后整体重取
-    partRows.value = await projectProgress(projectId, ui.currentLanguage)
-    Message.success('部件配置已保存')
-    return true
+    partRows.value = await projectProgress(projectId.value, ui.currentLanguage)
   } catch (error) {
-    console.error('保存部件配置失败:', error)
-    Message.error(error instanceof Error ? error.message : '保存失败')
-    return false
-  } finally {
-    partSubmitting.value = false
+    console.error('刷新部件进度失败:', error)
+    Message.error(error instanceof Error ? error.message : '刷新部件进度失败')
   }
+}
+
+function onPartModalClosed() {
+  partEditing.value = null
+}
+
+// 表格插槽只暴露 ProgressRow，部件的地址标识从 partRows 里按 id 取回
+function openPart(row: ProgressRow) {
+  const part = partRows.value.find((p) => p.id === row.id)
+  if (!part) return
+  router.push({
+    name: 'part-detail',
+    params: { slug: projectSlug.value, partSlug: part.slug },
+  })
 }
 </script>
 
@@ -369,7 +359,7 @@ async function submitPart(): Promise<boolean> {
               <ProgressTable
                 :rows="partRows"
                 name-label="部件"
-                @row-click="(row) => router.push({ name: 'part-translate', params: { id: row.id } })"
+                @row-click="openPart"
               >
                 <template #name="{ row }">
                   {{ row.name }}
@@ -470,6 +460,9 @@ async function submitPart(): Promise<boolean> {
               <a-form-item field="name" label="项目名称" required :rules="[{ required: true, message: '项目名称不能为空' }]">
                 <a-input v-model="settingsForm.name" allow-clear />
               </a-form-item>
+              <a-form-item field="slug" label="地址标识" required :extra="SLUG_MESSAGE">
+                <a-input v-model="settingsForm.slug" allow-clear />
+              </a-form-item>
               <a-form-item field="namespace" label="命名空间" required :rules="[{ required: true, message: '命名空间不能为空' }]">
                 <a-input v-model="settingsForm.namespace" allow-clear />
               </a-form-item>
@@ -511,62 +504,13 @@ async function submitPart(): Promise<boolean> {
           </a-form>
         </a-modal>
 
-        <a-modal v-model:visible="partVisible" title="部件配置" :ok-loading="partSubmitting" :on-before-ok="submitPart">
-          <a-form :model="partForm" layout="vertical">
-            <a-form-item label="部件名称" required>
-              <a-input v-model="partForm.name" allow-clear />
-            </a-form-item>
-            <a-form-item label="命名空间" required>
-              <a-input v-model="partForm.namespace" allow-clear />
-            </a-form-item>
-
-            <a-typography-title :heading="6" class="project-detail__group-title">VCS</a-typography-title>
-            <a-form-item label="仓库地址" required>
-              <a-input v-model="partForm.repoUrl" allow-clear />
-            </a-form-item>
-            <a-form-item label="分支">
-              <a-input v-model="partForm.branch" placeholder="main" allow-clear />
-            </a-form-item>
-            <a-form-item label="Fork 所有者" extra="留空表示直接向原仓库提交翻译">
-              <a-input v-model="partForm.forkOwner" allow-clear />
-            </a-form-item>
-            <a-form-item label="Fork 分支">
-              <a-input v-model="partForm.forkBranch" allow-clear />
-            </a-form-item>
-
-            <a-typography-title :heading="6" class="project-detail__group-title">文件</a-typography-title>
-            <a-form-item label="语言文件掩码">
-              <a-radio-group v-model="fileMaskSync" type="button" size="small">
-                <a-radio :value="true">从项目同步</a-radio>
-                <a-radio :value="false">部件自定义</a-radio>
-              </a-radio-group>
-              <a-input
-                v-if="!fileMaskSync"
-                v-model="partForm.fileMask"
-                class="project-detail__sync-input"
-                allow-clear
-              />
-              <a-typography-text v-else type="secondary" class="project-detail__sync-value">
-                {{ detail.fileMask || '项目尚未配置' }}
-              </a-typography-text>
-            </a-form-item>
-            <a-form-item label="翻译模板文件">
-              <a-radio-group v-model="templatePathSync" type="button" size="small">
-                <a-radio :value="true">从项目同步</a-radio>
-                <a-radio :value="false">部件自定义</a-radio>
-              </a-radio-group>
-              <a-input
-                v-if="!templatePathSync"
-                v-model="partForm.templatePath"
-                class="project-detail__sync-input"
-                allow-clear
-              />
-              <a-typography-text v-else type="secondary" class="project-detail__sync-value">
-                {{ detail.templatePath || '项目尚未配置' }}
-              </a-typography-text>
-            </a-form-item>
-          </a-form>
-        </a-modal>
+        <PartEditModal
+          :part="partEditing"
+          :project-file-mask="detail.fileMask"
+          :project-template-path="detail.templatePath"
+          @saved="onPartSaved"
+          @closed="onPartModalClosed"
+        />
 
         <a-modal v-model:visible="addVisible" title="添加成员" :ok-loading="addSubmitting" :on-before-ok="submitAddMember">
           <a-form :model="addForm" layout="vertical">
@@ -614,16 +558,6 @@ async function submitPart(): Promise<boolean> {
 
   &__lang-select {
     width: 200px;
-  }
-
-  &__sync-input {
-    margin-top: 8px;
-  }
-
-  &__sync-value {
-    display: block;
-    margin-top: 8px;
-    word-break: break-all;
   }
 
   &__settings {

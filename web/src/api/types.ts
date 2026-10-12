@@ -21,6 +21,8 @@ export interface RegisterConfig {
 
 export interface ProjectSummary {
   id: number
+  // 项目地址中使用的标识，全站唯一，由项目负责人配置
+  slug: string
   name: string
   namespace: string
   description: string
@@ -58,6 +60,7 @@ export interface ProjectDetail extends ProjectSummary {
 }
 
 export interface ProjectInput {
+  slug: string
   name: string
   namespace: string
   description: string
@@ -70,6 +73,8 @@ export interface ProjectInput {
 export interface Part {
   id: number
   projectId: number
+  // 部件在项目地址中使用的标识，项目内唯一，由维护者配置
+  slug: string
   name: string
   namespace: string
   repoUrl: string
@@ -84,6 +89,7 @@ export interface Part {
 
 export interface PartInput {
   projectId: number
+  slug: string
   name: string
   namespace: string
   repoUrl: string
@@ -92,6 +98,32 @@ export interface PartInput {
   forkBranch: string
   fileMask: string
   templatePath: string
+}
+
+// 部件级成员角色：维护者可改部件配置，译者只参与翻译
+export type PartRole = 'maintainer' | 'translator'
+
+export interface PartMember {
+  username: string
+  displayName: string
+  avatarUrl: string
+  role: PartRole
+}
+
+// 语言级成员角色：校对可批准该语言译文，译者只参与翻译
+export type LanguageRole = 'proofreader' | 'translator'
+
+export interface LanguageMember {
+  username: string
+  displayName: string
+  avatarUrl: string
+  role: LanguageRole
+}
+
+// 成员添加请求体：部件级与语言级成员接口共用，角色由各接口自行约束
+export interface MemberInput<R extends string = string> {
+  username: string
+  role: R
 }
 
 export interface PartDetail extends Part {

@@ -30,8 +30,9 @@ export function createProject(input: ProjectInput): Promise<ProjectDetail> {
   return post<ProjectDetail>('/projects', input)
 }
 
-export function projectDetail(id: number): Promise<ProjectDetail> {
-  return get<ProjectDetail>(`/projects/${id}`)
+// 详情接口同时接受数字 id 与 slug，页面按地址段传入
+export function projectDetail(key: number | string): Promise<ProjectDetail> {
+  return get<ProjectDetail>(`/projects/${encodeURIComponent(key)}`)
 }
 
 export function updateProject(id: number, input: ProjectInput): Promise<ProjectDetail> {

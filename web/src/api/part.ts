@@ -1,5 +1,16 @@
-import { get, post, put } from './client'
-import type { LanguageProgress, Part, PartDetail, PartInput, TranslationEntry } from './types'
+import { del, get, post, put } from './client'
+import type {
+  LanguageMember,
+  LanguageProgress,
+  LanguageRole,
+  MemberInput,
+  Part,
+  PartDetail,
+  PartInput,
+  PartMember,
+  PartRole,
+  TranslationEntry,
+} from './types'
 
 export function createPart(input: PartInput): Promise<Part> {
   return post<Part>('/parts', input)
@@ -9,12 +20,48 @@ export function partDetail(id: number): Promise<PartDetail> {
   return get<PartDetail>(`/parts/${id}`)
 }
 
+// 部件页面一律以项目 slug + 部件 slug 寻址，内部接口再按返回的 id 调用
+export function partDetailBySlug(projectSlug: string, partSlug: string): Promise<PartDetail> {
+  return get<PartDetail>(`/projects/${encodeURIComponent(projectSlug)}/parts/${encodeURIComponent(partSlug)}`)
+}
+
+export function partLanguageProgressBySlug(projectSlug: string, partSlug: string): Promise<LanguageProgress[]> {
+  return get<LanguageProgress[]>(
+    `/projects/${encodeURIComponent(projectSlug)}/parts/${encodeURIComponent(partSlug)}/languages`,
+  )
+}
+
 export function updatePart(id: number, input: PartInput): Promise<Part> {
   return put<Part>(`/parts/${id}`, input)
 }
 
 export function partLanguageProgress(id: number): Promise<LanguageProgress[]> {
   return get<LanguageProgress[]>(`/parts/${id}/languages`)
+}
+
+export function partMembers(id: number): Promise<PartMember[]> {
+  return get<PartMember[]>(`/parts/${id}/members`)
+}
+
+export function addPartMember(id: number, input: MemberInput<PartRole>): Promise<PartMember[]> {
+  return post<PartMember[]>(`/parts/${id}/members`, input)
+}
+
+export function removePartMember(id: number, username: string): Promise<void> {
+  return del<void>(`/parts/${id}/members/${encodeURIComponent(username)}`)
+}
+
+// 语言级成员以 部件 + 语言代码 定位，只在该部件的该语言下生效
+export function languageMembers(partId: number, language: string): Promise<LanguageMember[]> {
+  return get<LanguageMember[]>(`/parts/${partId}/languages/${encodeURIComponent(language)}/members`)
+}
+
+export function addLanguageMember(partId: number, language: string, input: MemberInput<LanguageRole>): Promise<LanguageMember[]> {
+  return post<LanguageMember[]>(`/parts/${partId}/languages/${encodeURIComponent(language)}/members`, input)
+}
+
+export function removeLanguageMember(partId: number, language: string, username: string): Promise<void> {
+  return del<void>(`/parts/${partId}/languages/${encodeURIComponent(language)}/members/${encodeURIComponent(username)}`)
 }
 
 // 条目按工作语言返回译文，参考语言原文始终随条目下发

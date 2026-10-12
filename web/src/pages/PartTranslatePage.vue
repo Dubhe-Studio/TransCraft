@@ -1,25 +1,31 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
 import {
   approveEntry,
-  partDetail,
+  partDetailBySlug,
   partEntries,
   partLanguageProgress,
   saveSuggestion,
   saveTranslation,
 } from '../api/part'
+import { fromLangSegment, toLangSegment } from '../langSegment'
 import type { LanguageProgress as LanguageProgressRow, PartDetail, TranslationEntry } from '../api/types'
 import LanguageProgress from '../components/LanguageProgress.vue'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 
 const route = useRoute()
+const router = useRouter()
 const ui = useUiStore()
 const auth = useAuthStore()
 
-const partId = Number(route.params.id)
+// 部件以地址中的 项目 slug + 部件 slug 定位，翻译语言由地址中的语言段决定；同一路由组件复用时从地址实时取
+const projectSlug = computed(() => String(route.params.slug))
+const partSlug = computed(() => String(route.params.partSlug))
+const language = ref(fromLangSegment(String(route.params.lang)))
+const partId = ref(0)
 
 const part = ref<PartDetail | null>(null)
 const entries = ref<TranslationEntry[]>([])
@@ -61,19 +67,19 @@ const suggesting = ref(false)
 
 const primaryLanguage = computed(() => auth.user?.primaryLanguage ?? '')
 
-// 当前工作语言可能不在部件已有语言列表中（如从其它部件切换过来），补一个仅含代码的选项保证选择器正常显示
+// 地址中的语言可能不在部件已有语言列表中，补一个仅含代码的选项保证选择器正常显示
 const languageOptions = computed<LanguageProgressRow[]>(() => {
   const rows = languageRows.value
-  if (ui.currentLanguage && !rows.some((r) => r.code === ui.currentLanguage)) {
+  if (language.value && !rows.some((r) => r.code === language.value)) {
     return [
       ...rows,
-      { code: ui.currentLanguage, name: ui.currentLanguage, translatedPercent: 0, untranslatedStrings: 0, totalStrings: 0 },
+      { code: language.value, name: language.value, translatedPercent: 0, untranslatedStrings: 0, totalStrings: 0 },
     ]
   }
   return rows
 })
 
-// 语言快速切换时旧请求不得覆盖新数据
+// 语言或部件快速切换时旧请求不得覆盖新数据
 let loadSeq = 0
 
 async function load() {
@@ -81,10 +87,13 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [partInfo, list, langRows] = await Promise.all([
-      partDetail(partId),
-      partEntries(partId, ui.currentLanguage),
-      partLanguageProgress(partId),
+    // 条目与语言接口按部件 id 调用，先由地址中的 slug 解析出 id；解析与取数共用一个序号，快速切换部件时不得出现详情与条目错配
+    const partInfo = await partDetailBySlug(projectSlug.value, partSlug.value)
+    if (seq !== loadSeq) return
+    partId.value = partInfo.id
+    const [list, langRows] = await Promise.all([
+      partEntries(partInfo.id, language.value),
+      partLanguageProgress(partInfo.id),
     ])
     if (seq !== loadSeq) return
     part.value = partInfo
@@ -118,30 +127,46 @@ function confirmDiscardDraft(next: () => void) {
   next()
 }
 
-// 页内选择器先经确认再写入 store，避免取消后显示语言与条目数据脱节；标记位防止 watch 二次弹窗
-let suppressLanguageConfirm = false
-
+// 页内选择器切换语言即切换地址，地址变化驱动条目重载
 // Arco change 事件的值类型含多选数组形态，此处统一按单值取字符串
 function changeLanguage(value: string | number | boolean | Record<string, unknown> | (string | number | boolean | Record<string, unknown>)[]) {
   const code = String(value)
-  if (code === ui.currentLanguage) return
+  if (code === language.value) return
   confirmDiscardDraft(() => {
-    suppressLanguageConfirm = true
-    ui.setCurrentLanguage(code)
+    router.push({
+      name: 'part-translate',
+      params: { slug: projectSlug.value, partSlug: partSlug.value, lang: toLangSegment(code) },
+    })
   })
 }
 
-// 条目译文跟随当前工作语言变化；顶栏菜单的切换没有前置确认，在这里拦截未保存修改
-watch(() => ui.currentLanguage, () => {
-  if (suppressLanguageConfirm) {
-    suppressLanguageConfirm = false
-    load()
-    return
-  }
-  confirmDiscardDraft(load)
+// 地址语言段变化（页内切换或浏览器前进后退）时同步工作语言并重载
+watch(() => route.params.lang, (lang) => {
+  if (route.name !== 'part-translate' || !lang) return
+  const code = fromLangSegment(String(lang))
+  if (code === language.value && partId.value) return
+  language.value = code
+  ui.setCurrentLanguage(code)
+  load()
 })
 
-onMounted(load)
+// 部件地址段变化（前进后退切到另一部件）时重载
+watch(() => [route.params.slug, route.params.partSlug], () => {
+  if (route.name !== 'part-translate') return
+  load()
+})
+
+// 顶栏语言菜单写全局 store，这里把变化折回页内切换链路，保持工作语言只由地址决定
+watch(() => ui.currentLanguage, (code) => {
+  if (route.name !== 'part-translate' || code === language.value) return
+  changeLanguage(code)
+})
+
+onMounted(() => {
+  // 顶栏语言展示跟随本页语言，首次进入直接同步无需确认（草稿尚为空）
+  ui.setCurrentLanguage(language.value)
+  load()
+})
 
 function selectEntry(entry: TranslationEntry) {
   confirmDiscardDraft(() => {
@@ -183,12 +208,12 @@ async function persistDraft(): Promise<boolean> {
   const text = draft.value
   saving.value = true
   try {
-    await saveTranslation(partId, ui.currentLanguage, entry.key, text)
+    await saveTranslation(partId.value, language.value, entry.key, text)
     entry.target = text
     // 译文被修改后原批准结论不再成立
     entry.approved = false
     // 完成情况按已存译文实时计算，保存后同步刷新
-    languageRows.value = await partLanguageProgress(partId)
+    languageRows.value = await partLanguageProgress(partId.value)
     return true
   } catch (error) {
     console.error('保存译文失败:', error)
@@ -217,7 +242,7 @@ async function approve() {
   if (!entry) return
   approving.value = true
   try {
-    await approveEntry(partId, ui.currentLanguage, entry.key)
+    await approveEntry(partId.value, language.value, entry.key)
     entry.approved = true
     Message.success('已批准')
   } catch (error) {
@@ -242,7 +267,7 @@ async function submitSuggestion(): Promise<boolean> {
   }
   suggesting.value = true
   try {
-    await saveSuggestion(partId, ui.currentLanguage, entry.key, suggestText.value.trim())
+    await saveSuggestion(partId.value, language.value, entry.key, suggestText.value.trim())
     Message.success('建议已提交')
     return true
   } catch (error) {
@@ -268,13 +293,18 @@ async function submitSuggestion(): Promise<boolean> {
         <div class="translate__header">
           <div>
             <a-typography-title :heading="5" style="margin: 0">
-              {{ part.projectName }} / {{ part.name }}
+              <router-link
+                :to="{ name: 'part-language', params: { slug: projectSlug, partSlug, lang: toLangSegment(language) } }"
+                class="translate__part-link"
+              >
+                {{ part.projectName }} / {{ part.name }}
+              </router-link>
             </a-typography-title>
             <a-typography-text type="secondary">{{ part.namespace }}</a-typography-text>
           </div>
           <a-space>
             <a-select
-              :model-value="ui.currentLanguage"
+              :model-value="language"
               class="translate__lang-select"
               @change="changeLanguage"
             >
@@ -310,7 +340,7 @@ async function submitSuggestion(): Promise<boolean> {
             </div>
           </div>
           <div class="translate__field">
-            <div class="translate__field-label">当前译文（{{ ui.currentLanguage }}）</div>
+            <div class="translate__field-label">当前译文（{{ language }}）</div>
             <a-textarea
               v-model="draft"
               :auto-size="{ minRows: 3 }"
@@ -390,6 +420,15 @@ async function submitSuggestion(): Promise<boolean> {
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 16px;
+  }
+
+  &__part-link {
+    color: var(--color-text-1);
+    text-decoration: none;
+
+    &:hover {
+      color: rgb(var(--primary-6));
+    }
   }
 
   &__lang-select {
