@@ -51,11 +51,6 @@ export interface ProjectProgress extends ProjectSummary, ProgressStats {}
 export type ProjectRole = 'owner' | 'maintainer' | 'translator'
 
 export interface ProjectDetail extends ProjectSummary {
-  repoUrl: string
-  branch: string
-  // fork 为空串表示直接向原仓库推送
-  forkOwner: string
-  forkBranch: string
   fileMask: string
   templatePath: string
   referenceLanguage: string
@@ -66,21 +61,23 @@ export interface ProjectInput {
   name: string
   namespace: string
   description: string
-  repoUrl: string
-  branch: string
-  forkOwner: string
-  forkBranch: string
   fileMask: string
   templatePath: string
   referenceLanguage: string
 }
 
-// 部件对应仓库中 assets/<namespace> 的一个命名空间
+// 部件对应仓库中 assets/<namespace> 的一个命名空间，VCS 配置在部件级管理
 export interface Part {
   id: number
   projectId: number
   name: string
   namespace: string
+  repoUrl: string
+  branch: string
+  // fork 为空串表示直接向原仓库推送
+  forkOwner: string
+  forkBranch: string
+  // 空串表示从项目同步，非空为部件级自定义值
   fileMask: string
   templatePath: string
 }
@@ -89,6 +86,10 @@ export interface PartInput {
   projectId: number
   name: string
   namespace: string
+  repoUrl: string
+  branch: string
+  forkOwner: string
+  forkBranch: string
   fileMask: string
   templatePath: string
 }
@@ -185,4 +186,13 @@ export interface SiteLinks {
 export interface LanguageInfo {
   code: string
   name: string
+}
+
+// 项目或部件在单个语言下的完成情况
+export interface LanguageProgress {
+  code: string
+  name: string
+  translatedPercent: number
+  untranslatedStrings: number
+  totalStrings: number
 }

@@ -1,5 +1,5 @@
 import { get, post, put } from './client'
-import type { Part, PartDetail, PartInput, TranslationEntry } from './types'
+import type { LanguageProgress, Part, PartDetail, PartInput, TranslationEntry } from './types'
 
 export function createPart(input: PartInput): Promise<Part> {
   return post<Part>('/parts', input)
@@ -7,6 +7,14 @@ export function createPart(input: PartInput): Promise<Part> {
 
 export function partDetail(id: number): Promise<PartDetail> {
   return get<PartDetail>(`/parts/${id}`)
+}
+
+export function updatePart(id: number, input: PartInput): Promise<Part> {
+  return put<Part>(`/parts/${id}`, input)
+}
+
+export function partLanguageProgress(id: number): Promise<LanguageProgress[]> {
+  return get<LanguageProgress[]>(`/parts/${id}/languages`)
 }
 
 // 条目按工作语言返回译文，参考语言原文始终随条目下发

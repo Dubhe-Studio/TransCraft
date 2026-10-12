@@ -2,8 +2,17 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
-import { approveEntry, partDetail, partEntries, saveSuggestion, saveTranslation } from '../api/part'
-import type { PartDetail, TranslationEntry } from '../api/types'
+import {
+  approveEntry,
+  partDetail,
+  partEntries,
+  partLanguageProgress,
+  saveSuggestion,
+  saveTranslation,
+} from '../api/part'
+import { supportedLanguages } from '../api/language'
+import type { LanguageInfo, LanguageProgress as LanguageProgressRow, PartDetail, TranslationEntry } from '../api/types'
+import LanguageProgress from '../components/LanguageProgress.vue'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 
@@ -15,6 +24,8 @@ const partId = Number(route.params.id)
 
 const part = ref<PartDetail | null>(null)
 const entries = ref<TranslationEntry[]>([])
+const languageList = ref<LanguageInfo[]>([])
+const languageRows = ref<LanguageProgressRow[]>([])
 const loading = ref(true)
 const loadError = ref('')
 
@@ -59,13 +70,17 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [partInfo, list] = await Promise.all([
+    const [partInfo, list, langs, langRows] = await Promise.all([
       partDetail(partId),
       partEntries(partId, ui.currentLanguage),
+      supportedLanguages(),
+      partLanguageProgress(partId),
     ])
     if (seq !== loadSeq) return
     part.value = partInfo
     entries.value = list
+    languageList.value = langs
+    languageRows.value = langRows
     // 默认选中第一条未翻译条目，与列表的未翻译靠前排序保持一致
     const first = list.find((e) => !e.target) ?? list[0]
     selectedKey.value = first?.key ?? ''
@@ -220,10 +235,25 @@ async function submitSuggestion(): Promise<boolean> {
 
       <template v-else-if="part">
         <div class="translate__header">
-          <a-typography-title :heading="5" style="margin: 0">
-            {{ part.projectName }} / {{ part.name }}
-          </a-typography-title>
-          <a-typography-text type="secondary">{{ part.namespace }}</a-typography-text>
+          <div>
+            <a-typography-title :heading="5" style="margin: 0">
+              {{ part.projectName }} / {{ part.name }}
+            </a-typography-title>
+            <a-typography-text type="secondary">{{ part.namespace }}</a-typography-text>
+          </div>
+          <a-space>
+            <a-select v-model="ui.currentLanguage" class="translate__lang-select">
+              <a-option v-for="lang in languageList" :key="lang.code" :value="lang.code">
+                {{ lang.name }}
+              </a-option>
+            </a-select>
+            <a-popover title="各语言完成情况" position="br" :content-style="{ width: '360px' }">
+              <a-button>完成情况</a-button>
+              <template #content>
+                <LanguageProgress :rows="languageRows" />
+              </template>
+            </a-popover>
+          </a-space>
         </div>
 
         <div v-if="selected" class="translate__panel">
@@ -318,9 +348,14 @@ async function submitSuggestion(): Promise<boolean> {
 
   &__header {
     display: flex;
-    align-items: baseline;
+    align-items: flex-start;
+    justify-content: space-between;
     gap: 12px;
     margin-bottom: 16px;
+  }
+
+  &__lang-select {
+    width: 200px;
   }
 
   &__panel {

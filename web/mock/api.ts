@@ -7,6 +7,7 @@ import type {
   AdminUser,
   InviteCode,
   LanguageInfo,
+  LanguageProgress,
   LoginResult,
   Part,
   PartDetail,
@@ -17,6 +18,7 @@ import type {
   ProjectMember,
   ProjectProgress,
   ProjectSummary,
+  ProgressStats,
   SiteGroup,
   SiteLinks,
   TranslationEntry,
@@ -87,10 +89,6 @@ const projects: ProjectDetail[] = [
     description: '机械动力：传动与自动化的美学',
     createdBy: 'translator',
     lastContributionAt: '2026-10-10T07:20:00.000Z',
-    repoUrl: 'https://github.com/Creators-of-Create/Create',
-    branch: 'main',
-    forkOwner: '',
-    forkBranch: '',
     fileMask: 'src/main/resources/assets/create/lang/*.json',
     templatePath: 'src/generated/resources/assets/create/lang/en_us.json',
     referenceLanguage: 'en_us',
@@ -103,10 +101,6 @@ const projects: ProjectDetail[] = [
     description: '农夫乐事：更丰富的农耕与烹饪',
     createdBy: 'translator',
     lastContributionAt: '2026-09-28T01:00:00.000Z',
-    repoUrl: 'https://github.com/vectorwing/FarmersDelight',
-    branch: '1.20',
-    forkOwner: '',
-    forkBranch: '',
     fileMask: 'src/main/resources/assets/farmersdelight/lang/*.json',
     templatePath: 'src/main/resources/assets/farmersdelight/lang/en_us.json',
     referenceLanguage: 'en_us',
@@ -119,10 +113,6 @@ const projects: ProjectDetail[] = [
     description: '应用能源 2：数字化物品存储网络',
     createdBy: 'carol',
     lastContributionAt: '2026-10-11T13:40:00.000Z',
-    repoUrl: 'https://github.com/AppliedEnergistics/Applied-Energistics-2',
-    branch: 'main',
-    forkOwner: 'translator',
-    forkBranch: 'zh_cn-translation',
     fileMask: 'src/main/resources/assets/ae2/lang/*.json',
     templatePath: 'src/main/resources/assets/ae2/lang/en_us.json',
     referenceLanguage: 'en_us',
@@ -145,14 +135,23 @@ const parts: Part[] = [
     projectId: 1,
     name: 'Create 本体',
     namespace: 'create',
-    fileMask: 'src/main/resources/assets/create/lang/*.json',
-    templatePath: 'src/generated/resources/assets/create/lang/en_us.json',
+    repoUrl: 'https://github.com/Creators-of-Create/Create',
+    branch: 'main',
+    forkOwner: '',
+    forkBranch: '',
+    // 文件掩码与模板文件置空表示从项目同步
+    fileMask: '',
+    templatePath: '',
   },
   {
     id: 20,
     projectId: 2,
     name: "Farmer's Delight 本体",
     namespace: 'farmersdelight',
+    repoUrl: 'https://github.com/vectorwing/FarmersDelight',
+    branch: '1.20',
+    forkOwner: '',
+    forkBranch: '',
     fileMask: 'src/main/resources/assets/farmersdelight/lang/*.json',
     templatePath: 'src/main/resources/assets/farmersdelight/lang/en_us.json',
   },
@@ -161,15 +160,18 @@ const parts: Part[] = [
     projectId: 3,
     name: 'AE2 本体',
     namespace: 'ae2',
+    repoUrl: 'https://github.com/AppliedEnergistics/Applied-Energistics-2',
+    branch: 'main',
+    forkOwner: 'translator',
+    forkBranch: 'zh_cn-translation',
     fileMask: 'src/main/resources/assets/ae2/lang/*.json',
     templatePath: 'src/main/resources/assets/ae2/lang/en_us.json',
   },
 ]
 
-// 统计数字是示意数据，与条目数量不追求严格对应
-const partStats: Record<number, PartProgress> = {
+// 统计数字是示意数据，与条目数量不追求严格对应；按部件 id 单独存放，部件基础信息始终从 parts 读取
+const partStats: Record<number, ProgressStats> = {
   10: {
-    ...parts[0],
     translatedPercent: 50,
     incompleteStrings: 32203,
     incompleteWords: 219570,
@@ -180,7 +182,6 @@ const partStats: Record<number, PartProgress> = {
     comments: 0,
   },
   20: {
-    ...parts[1],
     translatedPercent: 100,
     incompleteStrings: 0,
     incompleteWords: 0,
@@ -191,7 +192,6 @@ const partStats: Record<number, PartProgress> = {
     comments: 0,
   },
   30: {
-    ...parts[2],
     translatedPercent: 33,
     incompleteStrings: 1004,
     incompleteWords: 4000,
@@ -203,12 +203,50 @@ const partStats: Record<number, PartProgress> = {
   },
 }
 
+const emptyStats: ProgressStats = {
+  translatedPercent: 0,
+  incompleteStrings: 0,
+  incompleteWords: 0,
+  incompleteChars: 0,
+  untranslatedStrings: 0,
+  failingChecks: 0,
+  suggestions: 0,
+  comments: 0,
+}
+
 // 仪表盘项目进度为项目下全部部件的汇总示意，mock 直接沿用了部件口径
 const followedProgress: ProjectProgress[] = projects.map((p) => {
-  const stats = Object.values(partStats).find((s) => s.projectId === p.id) ?? partStats[10]
-  const { id: _partId, projectId: _projectId, ...rest } = stats
-  return { ...p, ...rest }
+  const stats = partStats[parts.find((part) => part.projectId === p.id)?.id ?? 10]
+  return { ...p, ...stats }
 })
+
+// 各语言完成情况的示意百分比，简体中文用条目数据实时计算故不在此列出
+const partLanguagePercents: Record<number, Record<string, number>> = {
+  10: { ja_jp: 62, de_de: 45, ru_ru: 30, fr_fr: 12 },
+  20: { ja_jp: 88, de_de: 100 },
+  30: { ja_jp: 40, ko_kr: 25 },
+}
+
+// 部件在单个语言下的完成情况：简体中文按条目与已存译文实测，其余语言取预设示意值
+function languageProgressForPart(partId: number): LanguageProgress[] {
+  const list = entries[partId] ?? []
+  const total = list.length
+  const percents: Record<string, number> = { en_us: 100, ...partLanguagePercents[partId] }
+  if (total > 0) {
+    const translated = list.filter((e) => (savedTargets[`${partId}|zh_cn|${e.key}`] ?? e.zhCn) !== '').length
+    percents.zh_cn = Math.round((translated / total) * 100)
+  }
+  return languages
+    .filter((lang) => (percents[lang.code] ?? 0) > 0)
+    .map((lang) => ({
+      code: lang.code,
+      name: lang.name,
+      translatedPercent: percents[lang.code],
+      untranslatedStrings: Math.round((total * (100 - percents[lang.code])) / 100),
+      totalStrings: total,
+    }))
+    .sort((a, b) => b.translatedPercent - a.translatedPercent || a.code.localeCompare(b.code))
+}
 
 const members: Record<number, ProjectMember[]> = {
   1: [
@@ -552,9 +590,8 @@ async function route(
     if (!requireAuth(req, res)) return
     const body = await readBody(req)
     if (typeof body.name !== 'string' || !body.name ||
-        typeof body.namespace !== 'string' || !body.namespace ||
-        typeof body.repoUrl !== 'string' || !body.repoUrl) {
-      sendJson(res, 400, { message: '项目名称、命名空间与仓库地址不能为空' })
+        typeof body.namespace !== 'string' || !body.namespace) {
+      sendJson(res, 400, { message: '项目名称与命名空间不能为空' })
       return
     }
     const created: ProjectDetail = {
@@ -564,10 +601,6 @@ async function route(
       description: typeof body.description === 'string' ? body.description : '',
       createdBy: sessionUser.username,
       lastContributionAt: '',
-      repoUrl: body.repoUrl,
-      branch: typeof body.branch === 'string' && body.branch ? body.branch : 'main',
-      forkOwner: typeof body.forkOwner === 'string' ? body.forkOwner : '',
-      forkBranch: typeof body.forkBranch === 'string' ? body.forkBranch : '',
       fileMask: typeof body.fileMask === 'string' ? body.fileMask : '',
       templatePath: typeof body.templatePath === 'string' ? body.templatePath : '',
       referenceLanguage: typeof body.referenceLanguage === 'string' && body.referenceLanguage ? body.referenceLanguage : 'en_us',
@@ -607,18 +640,13 @@ async function route(
     }
     const body = await readBody(req)
     if (typeof body.name !== 'string' || !body.name ||
-        typeof body.namespace !== 'string' || !body.namespace ||
-        typeof body.repoUrl !== 'string' || !body.repoUrl) {
-      sendJson(res, 400, { message: '项目名称、命名空间与仓库地址不能为空' })
+        typeof body.namespace !== 'string' || !body.namespace) {
+      sendJson(res, 400, { message: '项目名称与命名空间不能为空' })
       return
     }
     found.name = body.name
     found.namespace = body.namespace
     found.description = typeof body.description === 'string' ? body.description : ''
-    found.repoUrl = body.repoUrl
-    found.branch = typeof body.branch === 'string' && body.branch ? body.branch : found.branch
-    found.forkOwner = typeof body.forkOwner === 'string' ? body.forkOwner : ''
-    found.forkBranch = typeof body.forkBranch === 'string' ? body.forkBranch : ''
     found.fileMask = typeof body.fileMask === 'string' ? body.fileMask : ''
     found.templatePath = typeof body.templatePath === 'string' ? body.templatePath : ''
     found.referenceLanguage = typeof body.referenceLanguage === 'string' && body.referenceLanguage ? body.referenceLanguage : found.referenceLanguage
@@ -632,11 +660,42 @@ async function route(
     return
   }
 
+  const projectLanguagesMatch = /^\/api\/projects\/(\d+)\/languages$/.exec(path)
+  if (req.method === 'GET' && projectLanguagesMatch) {
+    if (!requireAuth(req, res)) return
+    const projectId = Number(projectLanguagesMatch[1])
+    // 项目级完成情况为项目下各部件的汇总：百分比取平均，条数取合计
+    const merged = new Map<string, { name: string; percentSum: number; partCount: number; untranslated: number; total: number }>()
+    for (const part of parts.filter((p) => p.projectId === projectId)) {
+      for (const row of languageProgressForPart(part.id)) {
+        const slot = merged.get(row.code) ?? { name: row.name, percentSum: 0, partCount: 0, untranslated: 0, total: 0 }
+        slot.percentSum += row.translatedPercent
+        slot.partCount += 1
+        slot.untranslated += row.untranslatedStrings
+        slot.total += row.totalStrings
+        merged.set(row.code, slot)
+      }
+    }
+    const result: LanguageProgress[] = [...merged.entries()]
+      .map(([code, slot]) => ({
+        code,
+        name: slot.name,
+        translatedPercent: Math.round(slot.percentSum / slot.partCount),
+        untranslatedStrings: slot.untranslated,
+        totalStrings: slot.total,
+      }))
+      .sort((a, b) => b.translatedPercent - a.translatedPercent || a.code.localeCompare(b.code))
+    sendJson(res, 200, result)
+    return
+  }
+
   const projectProgressMatch = /^\/api\/projects\/(\d+)\/progress$/.exec(path)
   if (req.method === 'GET' && projectProgressMatch) {
     if (!requireAuth(req, res)) return
     const projectId = Number(projectProgressMatch[1])
-    const list = Object.values(partStats).filter((s) => s.projectId === projectId)
+    const list: PartProgress[] = parts
+      .filter((p) => p.projectId === projectId)
+      .map((p) => ({ ...p, ...(partStats[p.id] ?? emptyStats) }))
     sendJson(res, 200, list)
     return
   }
@@ -683,8 +742,9 @@ async function route(
     const body = await readBody(req)
     if (typeof body.projectId !== 'number' ||
         typeof body.name !== 'string' || !body.name ||
-        typeof body.namespace !== 'string' || !body.namespace) {
-      sendJson(res, 400, { message: '所属项目、部件名称与命名空间不能为空' })
+        typeof body.namespace !== 'string' || !body.namespace ||
+        typeof body.repoUrl !== 'string' || !body.repoUrl) {
+      sendJson(res, 400, { message: '所属项目、部件名称、命名空间与仓库地址不能为空' })
       return
     }
     const input = body as unknown as PartInput
@@ -693,8 +753,12 @@ async function route(
       projectId: input.projectId,
       name: input.name,
       namespace: input.namespace,
-      fileMask: input.fileMask,
-      templatePath: input.templatePath,
+      repoUrl: input.repoUrl,
+      branch: typeof input.branch === 'string' && input.branch ? input.branch : 'main',
+      forkOwner: typeof input.forkOwner === 'string' ? input.forkOwner : '',
+      forkBranch: typeof input.forkBranch === 'string' ? input.forkBranch : '',
+      fileMask: typeof input.fileMask === 'string' ? input.fileMask : '',
+      templatePath: typeof input.templatePath === 'string' ? input.templatePath : '',
     }
     parts.push(created)
     sendJson(res, 200, created)
@@ -722,10 +786,41 @@ async function route(
     sendJson(res, 200, detail)
     return
   }
+  if (req.method === 'PUT' && partMatch) {
+    if (!requireAuth(req, res)) return
+    const found = parts.find((p) => p.id === Number(partMatch[1]))
+    if (!found) {
+      sendJson(res, 404, { message: '部件不存在' })
+      return
+    }
+    const body = await readBody(req)
+    if (typeof body.name !== 'string' || !body.name ||
+        typeof body.namespace !== 'string' || !body.namespace ||
+        typeof body.repoUrl !== 'string' || !body.repoUrl) {
+      sendJson(res, 400, { message: '部件名称、命名空间与仓库地址不能为空' })
+      return
+    }
+    found.name = body.name
+    found.namespace = body.namespace
+    found.repoUrl = body.repoUrl
+    found.branch = typeof body.branch === 'string' && body.branch ? body.branch : 'main'
+    found.forkOwner = typeof body.forkOwner === 'string' ? body.forkOwner : ''
+    found.forkBranch = typeof body.forkBranch === 'string' ? body.forkBranch : ''
+    found.fileMask = typeof body.fileMask === 'string' ? body.fileMask : ''
+    found.templatePath = typeof body.templatePath === 'string' ? body.templatePath : ''
+    sendJson(res, 200, found)
+    return
+  }
+
+  const partLanguagesMatch = /^\/api\/parts\/(\d+)\/languages$/.exec(path)
+  if (req.method === 'GET' && partLanguagesMatch) {
+    if (!requireAuth(req, res)) return
+    sendJson(res, 200, languageProgressForPart(Number(partLanguagesMatch[1])))
+    return
+  }
 
   const entriesMatch = /^\/api\/parts\/(\d+)\/entries$/.exec(path)
-  if (req.method === 'GET' && entriesMatch) {
-    if (!requireAuth(req, res)) return
+  if (req.method === 'GET' && entriesMatch) {    if (!requireAuth(req, res)) return
     const partId = Number(entriesMatch[1])
     const lang = queryParam(req, 'lang')
     const list = entries[partId] ?? []

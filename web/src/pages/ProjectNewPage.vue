@@ -14,10 +14,6 @@ const form = reactive<ProjectInput>({
   name: '',
   namespace: '',
   description: '',
-  repoUrl: '',
-  branch: 'main',
-  forkOwner: '',
-  forkBranch: '',
   fileMask: '',
   templatePath: '',
   referenceLanguage: 'en_us',
@@ -63,19 +59,7 @@ async function submit() {
       <a-form-item field="description" label="项目简介">
         <a-textarea v-model="form.description" placeholder="一句话介绍这个项目" :auto-size="{ minRows: 2 }" allow-clear />
       </a-form-item>
-      <a-form-item field="repoUrl" label="仓库地址" required :rules="[{ required: true, message: '仓库地址不能为空' }]">
-        <a-input v-model="form.repoUrl" placeholder="https://github.com/owner/repo" allow-clear />
-      </a-form-item>
-      <a-form-item field="branch" label="分支">
-        <a-input v-model="form.branch" placeholder="main" allow-clear />
-      </a-form-item>
-      <a-form-item field="forkOwner" label="Fork 所有者（可选）" extra="留空表示直接向原仓库提交翻译">
-        <a-input v-model="form.forkOwner" placeholder="你的 GitHub 用户名" allow-clear />
-      </a-form-item>
-      <a-form-item field="forkBranch" label="Fork 分支（可选）">
-        <a-input v-model="form.forkBranch" placeholder="留空表示与主分支同名" allow-clear />
-      </a-form-item>
-      <a-form-item field="fileMask" label="语言文件掩码" extra="相对仓库根目录的路径，例如 src/main/resources/assets/create/lang/*.json">
+      <a-form-item field="fileMask" label="语言文件掩码" extra="相对仓库根目录的路径，例如 src/main/resources/assets/create/lang/*.json；部件可选择同步此项">
         <a-input v-model="form.fileMask" placeholder="src/main/resources/assets/*/lang/*.json" allow-clear />
       </a-form-item>
       <a-form-item field="templatePath" label="翻译模板文件" extra="生成新语言文件时使用的模板路径">

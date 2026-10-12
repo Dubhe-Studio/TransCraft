@@ -5,11 +5,14 @@ import { Message } from '@arco-design/web-vue'
 import {
   addMember,
   projectDetail,
+  projectLanguageProgress,
   projectMembers,
   projectProgress,
   removeMember,
   updateProject,
 } from '../api/project'
+import { updatePart } from '../api/part'
+import { supportedLanguages } from '../api/language'
 import {
   createProjectGroup,
   deleteProjectGroup,
@@ -17,6 +20,9 @@ import {
   updateProjectGroup,
 } from '../api/group'
 import type {
+  LanguageInfo,
+  LanguageProgress as LanguageProgressRow,
+  PartInput,
   PartProgress,
   ProjectDetail,
   ProjectGroup,
@@ -25,6 +31,7 @@ import type {
   ProjectRole,
 } from '../api/types'
 import ProgressTable from '../components/ProgressTable.vue'
+import LanguageProgress from '../components/LanguageProgress.vue'
 import { useUiStore } from '../stores/ui'
 
 const route = useRoute()
@@ -37,6 +44,8 @@ const detail = ref<ProjectDetail | null>(null)
 const partRows = ref<PartProgress[]>([])
 const memberList = ref<ProjectMember[]>([])
 const groupList = ref<ProjectGroup[]>([])
+const languageList = ref<LanguageInfo[]>([])
+const languageRows = ref<LanguageProgressRow[]>([])
 const loading = ref(true)
 const loadError = ref('')
 
@@ -53,16 +62,20 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [project, progressRows, members, groups] = await Promise.all([
+    const [project, progressRows, members, groups, langs, langRows] = await Promise.all([
       projectDetail(projectId),
       projectProgress(projectId, ui.currentLanguage),
       projectMembers(projectId),
       projectGroups(projectId),
+      supportedLanguages(),
+      projectLanguageProgress(projectId),
     ])
     detail.value = project
     partRows.value = progressRows
     memberList.value = members
     groupList.value = groups
+    languageList.value = langs
+    languageRows.value = langRows
     syncSettingsForm(project)
   } catch (error) {
     console.error('加载项目详情失败:', error)
@@ -193,15 +206,11 @@ async function confirmDeleteGroup(group: ProjectGroup) {
   }
 }
 
-// 设置表单，随项目详情同步
+// 设置表单，随项目详情同步；VCS 与部件文件配置在部件级管理，不在项目设置中
 const settingsForm = reactive<ProjectInput>({
   name: '',
   namespace: '',
   description: '',
-  repoUrl: '',
-  branch: '',
-  forkOwner: '',
-  forkBranch: '',
   fileMask: '',
   templatePath: '',
   referenceLanguage: 'en_us',
@@ -212,10 +221,6 @@ function syncSettingsForm(project: ProjectDetail) {
   settingsForm.name = project.name
   settingsForm.namespace = project.namespace
   settingsForm.description = project.description
-  settingsForm.repoUrl = project.repoUrl
-  settingsForm.branch = project.branch
-  settingsForm.forkOwner = project.forkOwner
-  settingsForm.forkBranch = project.forkBranch
   settingsForm.fileMask = project.fileMask
   settingsForm.templatePath = project.templatePath
   settingsForm.referenceLanguage = project.referenceLanguage
@@ -231,6 +236,76 @@ async function saveSettings() {
     Message.error(error instanceof Error ? error.message : '保存失败')
   } finally {
     settingsSaving.value = false
+  }
+}
+
+// 部件配置弹窗：fileMask/templatePath 为空表示从项目同步，用独立布尔承载同步开关
+const partVisible = ref(false)
+const partEditing = ref<PartProgress | null>(null)
+const partSubmitting = ref(false)
+const partForm = reactive<PartInput>({
+  projectId,
+  name: '',
+  namespace: '',
+  repoUrl: '',
+  branch: 'main',
+  forkOwner: '',
+  forkBranch: '',
+  fileMask: '',
+  templatePath: '',
+})
+const fileMaskSync = ref(true)
+const templatePathSync = ref(true)
+
+function openEditPart(row: PartProgress) {
+  partEditing.value = row
+  partForm.name = row.name
+  partForm.namespace = row.namespace
+  partForm.repoUrl = row.repoUrl
+  partForm.branch = row.branch
+  partForm.forkOwner = row.forkOwner
+  partForm.forkBranch = row.forkBranch
+  partForm.fileMask = row.fileMask
+  partForm.templatePath = row.templatePath
+  fileMaskSync.value = row.fileMask === ''
+  templatePathSync.value = row.templatePath === ''
+  partVisible.value = true
+}
+
+// 返回是否允许关闭弹窗，校验失败或提交失败时保持弹窗打开
+async function submitPart(): Promise<boolean> {
+  const editing = partEditing.value
+  if (!editing) return false
+  const name = partForm.name.trim()
+  const namespace = partForm.namespace.trim()
+  const repoUrl = partForm.repoUrl.trim()
+  if (!name || !namespace || !repoUrl) {
+    Message.error('部件名称、命名空间与仓库地址不能为空')
+    return false
+  }
+  partSubmitting.value = true
+  try {
+    await updatePart(editing.id, {
+      projectId,
+      name,
+      namespace,
+      repoUrl,
+      branch: partForm.branch.trim() || 'main',
+      forkOwner: partForm.forkOwner.trim(),
+      forkBranch: partForm.forkBranch.trim(),
+      fileMask: fileMaskSync.value ? '' : partForm.fileMask.trim(),
+      templatePath: templatePathSync.value ? '' : partForm.templatePath.trim(),
+    })
+    // 进度行包含部件名称等基础信息，保存后整体重取
+    partRows.value = await projectProgress(projectId, ui.currentLanguage)
+    Message.success('部件配置已保存')
+    return true
+  } catch (error) {
+    console.error('保存部件配置失败:', error)
+    Message.error(error instanceof Error ? error.message : '保存失败')
+    return false
+  } finally {
+    partSubmitting.value = false
   }
 }
 </script>
@@ -255,26 +330,51 @@ async function saveSettings() {
           </div>
           <a-space>
             <a-tag color="arcoblue">{{ roleLabels[detail.role] }}</a-tag>
-            <a-link :href="detail.repoUrl" target="_blank">{{ detail.repoUrl }}</a-link>
-            <a-tag>分支 {{ detail.branch }}</a-tag>
           </a-space>
         </div>
 
         <a-tabs default-active-key="parts">
           <a-tab-pane key="parts" title="部件">
-            <div v-if="canManage" class="project-detail__tab-actions">
-              <a-button type="primary" @click="router.push({ name: 'component-new' })">
+            <div class="project-detail__tab-actions">
+              <a-select v-model="ui.currentLanguage" class="project-detail__lang-select">
+                <a-option v-for="lang in languageList" :key="lang.code" :value="lang.code">
+                  {{ lang.name }}
+                </a-option>
+              </a-select>
+              <a-button
+                v-if="canManage"
+                type="primary"
+                @click="router.push({ name: 'component-new', query: { project: String(projectId) } })"
+              >
                 <template #icon><icon-plus /></template>
                 添加部件
               </a-button>
             </div>
             <a-empty v-if="partRows.length === 0" description="还没有部件" />
-            <ProgressTable
-              v-else
-              :rows="partRows"
-              name-label="部件"
-              @row-click="(row) => router.push({ name: 'part-translate', params: { id: row.id } })"
-            />
+            <template v-else>
+              <ProgressTable
+                :rows="partRows"
+                name-label="部件"
+                @row-click="(row) => router.push({ name: 'part-translate', params: { id: row.id } })"
+              >
+                <template #name="{ row }">
+                  {{ row.name }}
+                  <a-button
+                    v-if="canManage"
+                    type="text"
+                    size="mini"
+                    @click.stop="openEditPart(row as PartProgress)"
+                  >
+                    编辑
+                  </a-button>
+                </template>
+              </ProgressTable>
+
+              <a-typography-title :heading="6" class="project-detail__group-title">
+                各语言完成情况
+              </a-typography-title>
+              <LanguageProgress :rows="languageRows" />
+            </template>
           </a-tab-pane>
 
           <a-tab-pane key="members" title="成员">
@@ -363,20 +463,6 @@ async function saveSettings() {
                 <a-textarea v-model="settingsForm.description" :auto-size="{ minRows: 2 }" allow-clear />
               </a-form-item>
 
-              <a-typography-title :heading="6" class="project-detail__group-title">VCS</a-typography-title>
-              <a-form-item field="repoUrl" label="仓库地址" required :rules="[{ required: true, message: '仓库地址不能为空' }]">
-                <a-input v-model="settingsForm.repoUrl" allow-clear />
-              </a-form-item>
-              <a-form-item field="branch" label="分支">
-                <a-input v-model="settingsForm.branch" allow-clear />
-              </a-form-item>
-              <a-form-item field="forkOwner" label="Fork 所有者" extra="留空表示直接向原仓库提交翻译">
-                <a-input v-model="settingsForm.forkOwner" allow-clear />
-              </a-form-item>
-              <a-form-item field="forkBranch" label="Fork 分支">
-                <a-input v-model="settingsForm.forkBranch" allow-clear />
-              </a-form-item>
-
               <a-typography-title :heading="6" class="project-detail__group-title">文件</a-typography-title>
               <a-form-item field="fileMask" label="语言文件掩码">
                 <a-input v-model="settingsForm.fileMask" allow-clear />
@@ -407,6 +493,63 @@ async function saveSettings() {
                 allow-create
                 placeholder="输入用户名后回车添加成员"
               />
+            </a-form-item>
+          </a-form>
+        </a-modal>
+
+        <a-modal v-model:visible="partVisible" title="部件配置" :ok-loading="partSubmitting" :on-before-ok="submitPart">
+          <a-form :model="partForm" layout="vertical">
+            <a-form-item label="部件名称" required>
+              <a-input v-model="partForm.name" allow-clear />
+            </a-form-item>
+            <a-form-item label="命名空间" required>
+              <a-input v-model="partForm.namespace" allow-clear />
+            </a-form-item>
+
+            <a-typography-title :heading="6" class="project-detail__group-title">VCS</a-typography-title>
+            <a-form-item label="仓库地址" required>
+              <a-input v-model="partForm.repoUrl" allow-clear />
+            </a-form-item>
+            <a-form-item label="分支">
+              <a-input v-model="partForm.branch" placeholder="main" allow-clear />
+            </a-form-item>
+            <a-form-item label="Fork 所有者" extra="留空表示直接向原仓库提交翻译">
+              <a-input v-model="partForm.forkOwner" allow-clear />
+            </a-form-item>
+            <a-form-item label="Fork 分支">
+              <a-input v-model="partForm.forkBranch" allow-clear />
+            </a-form-item>
+
+            <a-typography-title :heading="6" class="project-detail__group-title">文件</a-typography-title>
+            <a-form-item label="语言文件掩码">
+              <a-radio-group v-model="fileMaskSync" type="button" size="small">
+                <a-radio :value="true">从项目同步</a-radio>
+                <a-radio :value="false">部件自定义</a-radio>
+              </a-radio-group>
+              <a-input
+                v-if="!fileMaskSync"
+                v-model="partForm.fileMask"
+                class="project-detail__sync-input"
+                allow-clear
+              />
+              <a-typography-text v-else type="secondary" class="project-detail__sync-value">
+                {{ detail.fileMask || '项目尚未配置' }}
+              </a-typography-text>
+            </a-form-item>
+            <a-form-item label="翻译模板文件">
+              <a-radio-group v-model="templatePathSync" type="button" size="small">
+                <a-radio :value="true">从项目同步</a-radio>
+                <a-radio :value="false">部件自定义</a-radio>
+              </a-radio-group>
+              <a-input
+                v-if="!templatePathSync"
+                v-model="partForm.templatePath"
+                class="project-detail__sync-input"
+                allow-clear
+              />
+              <a-typography-text v-else type="secondary" class="project-detail__sync-value">
+                {{ detail.templatePath || '项目尚未配置' }}
+              </a-typography-text>
             </a-form-item>
           </a-form>
         </a-modal>
@@ -451,7 +594,22 @@ async function saveSettings() {
   &__tab-actions {
     display: flex;
     justify-content: flex-end;
+    gap: 12px;
     margin-bottom: 12px;
+  }
+
+  &__lang-select {
+    width: 200px;
+  }
+
+  &__sync-input {
+    margin-top: 8px;
+  }
+
+  &__sync-value {
+    display: block;
+    margin-top: 8px;
+    word-break: break-all;
   }
 
   &__settings {

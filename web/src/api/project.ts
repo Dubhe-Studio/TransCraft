@@ -1,5 +1,6 @@
 import { del, get, post, put } from './client'
 import type {
+  LanguageProgress,
   PartProgress,
   ProjectDetail,
   ProjectInput,
@@ -39,6 +40,10 @@ export function updateProject(id: number, input: ProjectInput): Promise<ProjectD
 
 export function projectProgress(id: number, language: string): Promise<PartProgress[]> {
   return get<PartProgress[]>(`/projects/${id}/progress?lang=${encodeURIComponent(language)}`)
+}
+
+export function projectLanguageProgress(id: number): Promise<LanguageProgress[]> {
+  return get<LanguageProgress[]>(`/projects/${id}/languages`)
 }
 
 export function projectMembers(id: number): Promise<ProjectMember[]> {
