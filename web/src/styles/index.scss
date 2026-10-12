@@ -7,16 +7,16 @@ body,
   height: 100%;
 }
 
-html {
-  // 深色模式下 fill 系变量是半透明白色，须先铺实色底才能让 body 的 fill-2 正确显色
-  background-color: var(--color-bg-1);
-}
-
 body {
   margin: 0;
   font-family: $font-family-base;
   background-color: var(--color-fill-2);
   color: var(--color-text-1);
+}
+
+// 深色下 fill 系变量是半透明白色叠加层，页面底色须改用实色的 bg-1
+body[arco-theme='dark'] {
+  background-color: var(--color-bg-1);
 }
 
 * {
