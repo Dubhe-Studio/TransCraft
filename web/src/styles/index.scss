@@ -7,6 +7,11 @@ body,
   height: 100%;
 }
 
+html {
+  // 深色模式下 fill 系变量是半透明白色，须先铺实色底才能让 body 的 fill-2 正确显色
+  background-color: var(--color-bg-1);
+}
+
 body {
   margin: 0;
   font-family: $font-family-base;
