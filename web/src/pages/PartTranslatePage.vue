@@ -66,8 +66,10 @@ async function load() {
     if (seq !== loadSeq) return
     part.value = partInfo
     entries.value = list
-    selectedKey.value = list[0]?.key ?? ''
-    draft.value = list[0]?.target ?? ''
+    // 默认选中第一条未翻译条目，与列表的未翻译靠前排序保持一致
+    const first = list.find((e) => !e.target) ?? list[0]
+    selectedKey.value = first?.key ?? ''
+    draft.value = first?.target ?? ''
   } catch (error) {
     if (seq !== loadSeq) return
     console.error('加载翻译条目失败:', error)
@@ -104,12 +106,13 @@ function selectEntry(entry: TranslationEntry) {
   })
 }
 
-// 排序后列表中当前条目之后的第一个未翻译条目
+// 从当前条目之后开始找第一个未翻译条目，找不到则绕回列表开头再找一遍
 function nextUntranslated(): TranslationEntry | null {
   const list = sortedEntries.value
   const index = list.findIndex((e) => e.key === selectedKey.value)
-  for (let i = index + 1; i < list.length; i += 1) {
-    if (!list[i].target) return list[i]
+  for (let offset = 1; offset < list.length; offset += 1) {
+    const entry = list[(index + offset) % list.length]
+    if (!entry.target) return entry
   }
   return null
 }
@@ -124,7 +127,7 @@ function moveToNextUntranslated() {
   if (next) {
     moveTo(next)
   } else {
-    Message.info('后面没有更多未翻译条目了')
+    Message.info('没有更多未翻译条目了')
   }
 }
 

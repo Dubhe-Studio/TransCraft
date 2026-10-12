@@ -711,6 +711,7 @@ async function route(
     const detail: PartDetail = {
       ...found,
       projectName: projects.find((p) => p.id === found.projectId)?.name ?? '',
+      referenceLanguage: projects.find((p) => p.id === found.projectId)?.referenceLanguage ?? '',
       canApprove: myRole === 'owner' || myRole === 'maintainer' || inApproveGroup,
     }
     sendJson(res, 200, detail)
