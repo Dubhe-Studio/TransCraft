@@ -2,7 +2,8 @@
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { followedProgress } from '../api/project'
-import type { ProjectProgress } from '../api/types'
+import type { ProgressRow, ProjectProgress } from '../api/types'
+import ProgressTable from '../components/ProgressTable.vue'
 import { useUiStore } from '../stores/ui'
 
 const router = useRouter()
@@ -29,10 +30,6 @@ async function load() {
 watch(() => ui.currentLanguage, load)
 
 onMounted(load)
-
-function formatNumber(value: number): string {
-  return value.toLocaleString()
-}
 </script>
 
 <template>
@@ -54,50 +51,12 @@ function formatNumber(value: number): string {
 
       <a-empty v-else-if="projects.length === 0" description="还没有关注的项目" />
 
-      <div v-else class="progress-table">
-        <div class="progress-table__row progress-table__row--head">
-          <span class="progress-table__cell progress-table__cell--project">项目</span>
-          <span class="progress-table__cell">已翻译</span>
-          <span class="progress-table__cell">未完成</span>
-          <span class="progress-table__cell">未完成的词</span>
-          <span class="progress-table__cell">未完成的字符数</span>
-          <span class="progress-table__cell">未翻译</span>
-          <span class="progress-table__cell">检查</span>
-          <span class="progress-table__cell">建议</span>
-          <span class="progress-table__cell">评论</span>
-        </div>
-
-        <div
-          v-for="project in projects"
-          :key="project.id"
-          class="progress-table__item"
-          @click="router.push({ name: 'project-detail', params: { id: project.id } })"
-        >
-          <div class="progress-table__row">
-            <span class="progress-table__cell progress-table__cell--project">
-              <icon-folder class="progress-table__folder" />
-              {{ project.name }}
-            </span>
-            <span class="progress-table__cell progress-table__cell--percent">
-              <icon-check-circle-fill v-if="project.translatedPercent >= 100" class="progress-table__done" />
-              <template v-else>{{ project.translatedPercent }}%</template>
-            </span>
-            <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(project.incompleteStrings) }}</span>
-            <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(project.incompleteWords) }}</span>
-            <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(project.incompleteChars) }}</span>
-            <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(project.untranslatedStrings) }}</span>
-            <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(project.failingChecks) }}</span>
-            <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(project.suggestions) }}</span>
-            <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(project.comments) }}</span>
-          </div>
-          <a-progress
-            :percent="project.translatedPercent / 100"
-            :show-text="false"
-            color="rgb(var(--primary-6))"
-            track-color="var(--color-fill-2)"
-          />
-        </div>
-      </div>
+      <ProgressTable
+        v-else
+        :rows="projects"
+        name-label="项目"
+        @row-click="(row: ProgressRow) => router.push({ name: 'project-detail', params: { id: row.id } })"
+      />
     </a-spin>
   </div>
 </template>
@@ -113,65 +72,6 @@ function formatNumber(value: number): string {
 
   &__body {
     width: 100%;
-  }
-}
-
-.progress-table {
-  width: 100%;
-
-  &__row {
-    display: grid;
-    // 项目名列占宽自适应，其余统计列等宽
-    grid-template-columns: minmax(220px, 2fr) repeat(8, minmax(90px, 1fr));
-    gap: 0 16px;
-    align-items: center;
-    padding: 8px 0;
-
-    &--head {
-      color: var(--color-text-2);
-      font-size: 13px;
-      border-bottom: 1px solid var(--color-border);
-    }
-  }
-
-  &__item {
-    cursor: pointer;
-    padding: 4px 0;
-
-    &:hover {
-      background-color: var(--color-fill-1);
-    }
-  }
-
-  &__cell {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-
-    &--project {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--color-text-1);
-    }
-
-    &--number {
-      color: var(--color-text-1);
-    }
-
-    &--percent {
-      color: rgb(var(--success-6));
-    }
-  }
-
-  &__folder {
-    color: rgb(var(--primary-6));
-    flex-shrink: 0;
-  }
-
-  &__done {
-    color: rgb(var(--success-6));
-    font-size: 18px;
   }
 }
 </style>

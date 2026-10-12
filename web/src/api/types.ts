@@ -38,6 +38,9 @@ export interface ProgressStats {
   comments: number
 }
 
+// 共用进度表接受的行形态，项目进度与部件进度都满足该结构
+export type ProgressRow = ProgressStats & { id: number; name: string }
+
 // 项目在指定语言下的翻译进度统计，用于仪表盘进度表
 export interface ProjectProgress extends ProjectSummary, ProgressStats {}
 
