@@ -41,7 +41,15 @@ pnpm install
 pnpm dev
 ```
 
-开发服务器已配置 `/api` 代理到后端 `127.0.0.1:8080`。
+`pnpm dev` 默认由 mock 中间件提供模拟接口数据（见 `web/mock/`），无需启动后端即可开发前端。需要对接真实后端时停用 mock，开发服务器会将 `/api` 代理到 `127.0.0.1:8080`：
+
+```bash
+# Windows PowerShell
+$env:MOCK_API='false'; pnpm dev
+
+# macOS / Linux
+MOCK_API=false pnpm dev
+```
 
 ## 提交前验证
 

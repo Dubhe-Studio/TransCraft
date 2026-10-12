@@ -41,7 +41,15 @@ pnpm install
 pnpm dev
 ```
 
-The dev server proxies `/api` to the backend at `127.0.0.1:8080`.
+By default `pnpm dev` serves mock API responses (see `web/mock/`), so the frontend works without a running backend. To develop against the real backend instead, disable the mock and the dev server will proxy `/api` to `127.0.0.1:8080`:
+
+```bash
+# Windows PowerShell
+$env:MOCK_API='false'; pnpm dev
+
+# macOS / Linux
+MOCK_API=false pnpm dev
+```
 
 ## Verification
 
