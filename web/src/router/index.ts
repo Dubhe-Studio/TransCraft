@@ -6,6 +6,9 @@ import MainLayout from '../layouts/MainLayout.vue'
 import LoginPage from '../pages/LoginPage.vue'
 import RegisterPage from '../pages/RegisterPage.vue'
 import DashboardPage from '../pages/DashboardPage.vue'
+import ProjectNewPage from '../pages/ProjectNewPage.vue'
+import ProjectDetailPage from '../pages/ProjectDetailPage.vue'
+import ComponentNewPage from '../pages/ComponentNewPage.vue'
 import PlaceholderPage from '../pages/PlaceholderPage.vue'
 
 declare module 'vue-router' {
@@ -28,10 +31,10 @@ export const router = createRouter({
       children: [
         { path: '', redirect: '/dashboard' },
         { path: 'dashboard', name: 'dashboard', component: DashboardPage, meta: { title: 'Dashboard' } },
+        { path: 'projects/new', name: 'project-new', component: ProjectNewPage, meta: { title: '添加项目' } },
+        { path: 'projects/:id', name: 'project-detail', component: ProjectDetailPage, meta: { title: '项目详情' } },
+        { path: 'components/new', name: 'component-new', component: ComponentNewPage, meta: { title: '添加部件' } },
         // TODO: 以下均为用户确认的占位路由，对应功能落地后逐个替换为真实页面；跟踪 TODO.md 第一阶段
-        { path: 'projects/new', name: 'project-new', component: PlaceholderPage, meta: { title: '添加项目' } },
-        { path: 'projects/:id', name: 'project-detail', component: PlaceholderPage, meta: { title: '项目详情' } },
-        { path: 'components/new', name: 'component-new', component: PlaceholderPage, meta: { title: '添加部件' } },
         { path: 'settings', name: 'settings', component: PlaceholderPage, meta: { title: '设置' } },
         { path: 'users/:name', name: 'user-home', component: PlaceholderPage, meta: { title: '用户主页' } },
         { path: 'admin', name: 'admin', component: PlaceholderPage, meta: { title: '管理' } },
