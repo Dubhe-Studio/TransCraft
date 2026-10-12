@@ -2,68 +2,38 @@
 
 # TransCraft
 
-**A full-stack monorepo starter: a Vite + Vue 3 + Arco Design frontend embedded into a Golang + Hertz backend, backed by MySQL/PostgreSQL and Redis.**
+**A collaborative i18n management platform for Minecraft-style translations: create projects, organize components, manage languages, and translate from a reference language.**
 
 English | [简体中文](README.zh_CN.md)
 
 </div>
 
-## Directory Structure
+## Overview
 
-```
-├── cmd/server/        # Backend entrypoint
-├── internal/
-│   ├── config/        # Configuration loading and validation
-│   ├── data/          # Database (GORM) and Redis connections
-│   ├── httpapi/       # HTTP routes, handlers, and frontend asset hosting
-│   └── webassets/     # Frontend build artifacts embedded via go:embed
-├── configs/           # Configuration files
-├── web/               # Frontend project (Vite + Vue)
-└── docker-compose.yml # Local MySQL / PostgreSQL / Redis environment
-```
+TransCraft is a multi-user, multi-project translation management platform. It targets Minecraft-style resource translations: flat JSON language files (`{ "group.key1": "trans1", "group.key2": "trans2" }`), the full set of Minecraft language codes (`zh_cn`, `zh_tw`, `zh_hk`, `lzh`, `en_us`, `ru_ru`, `ja_jp`, and every other language Minecraft supports), file masks such as `src/main/resources/assets/<namespace>/lang/*.json`, and translation templates such as `src/generated/resources/assets/<namespace>/lang/en_us.json`. Translations can be synchronized through Git and submitted as GitHub pull requests, with support for choosing the repository branch or working from a fork.
 
-## Quick Start
+The platform is under active development; see [TODO.md](TODO.md) for the roadmap and current progress.
 
-### 1. Start dependencies
+## Deployment
+
+Prerequisites: Docker (or a local MySQL/PostgreSQL and Redis), Go 1.27+, Node.js 24+ with pnpm.
 
 ```bash
-docker compose up -d
-```
+docker compose up -d                     # start MySQL / PostgreSQL / Redis
 
-### 2. Start the backend
-
-PostgreSQL is the default; to switch databases, edit `database.driver` and `database.dsn` in `configs/config.yaml`.
-
-```bash
-go run ./cmd/server
-```
-
-The server listens on `127.0.0.1:8080` and exposes:
-
-- `GET /ping` — liveness probe
-- `GET /api/health` — database and Redis health check
-
-### 3. Start the frontend (development mode)
-
-```bash
-cd web
-pnpm install
-pnpm dev
-```
-
-The dev server proxies `/api` to the backend at `127.0.0.1:8080`.
-
-## Same-Origin Deployment (Production)
-
-The frontend build artifacts are embedded into the backend binary via `go:embed` and served by Hertz on the same origin — similar to dropping a Vue app into Spring Boot's `public` folder:
-
-```bash
-cd web && pnpm build        # outputs to internal/webassets/dist
+cd web && pnpm install && pnpm build     # build the frontend into the backend module
 cd .. && go build -o transcraft-server.exe ./cmd/server
-./transcraft-server.exe     # open http://127.0.0.1:8080 in your browser
+
+./transcraft-server.exe                  # open http://127.0.0.1:8080 in your browser
 ```
 
-API routes (`/ping`, `/api/*`) take precedence; all other requests are served as static files, and unmatched paths fall back to `index.html` to support frontend history routing. Deployment requires only the binary and `configs/config.yaml`.
+The frontend is embedded into the backend binary and served on the same origin, so deployment requires only the executable and `configs/config.yaml` (database and Redis connection settings).
+
+## Community
+
+- [Code of Conduct](CODE_OF_CONDUCT.md) — participation guidelines for everyone
+- [Contributing](CONTRIBUTING.md) — development environment setup and contribution workflow
+- [TODO](TODO.md) — roadmap and progress
 
 ## License
 
