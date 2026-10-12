@@ -3,7 +3,24 @@
 // 数据口径与 src/api 下各模块约定的前后端契约保持一致。
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Connect, Plugin } from 'vite'
-import type { LanguageInfo, LoginResult, ProjectProgress, ProjectSummary, UserProfile } from '../src/api/types.ts'
+import type {
+  AdminUser,
+  InviteCode,
+  LanguageInfo,
+  LoginResult,
+  Part,
+  PartDetail,
+  PartInput,
+  PartProgress,
+  ProjectDetail,
+  ProjectMember,
+  ProjectProgress,
+  ProjectSummary,
+  SiteLinks,
+  TranslationEntry,
+  UserProfile,
+  UserPublicProfile,
+} from '../src/api/types.ts'
 
 // 使用 admin 角色以便开发时能看到全部菜单项
 const demoUser: UserProfile = {
@@ -60,16 +77,89 @@ const languages: LanguageInfo[] = [
   { code: 'ro_ro', name: 'Română' },
 ]
 
-const followed: ProjectSummary[] = [
-  { id: 1, name: 'Create', namespace: 'create', description: '机械动力：传动与自动化的美学' },
-  { id: 2, name: "Farmer's Delight", namespace: 'farmersdelight', description: '农夫乐事：更丰富的农耕与烹饪' },
-  { id: 3, name: 'Applied Energistics 2', namespace: 'ae2', description: '应用能源 2：数字化物品存储网络' },
+const projects: ProjectDetail[] = [
+  {
+    id: 1,
+    name: 'Create',
+    namespace: 'create',
+    description: '机械动力：传动与自动化的美学',
+    repoUrl: 'https://github.com/Creators-of-Create/Create',
+    branch: 'main',
+    forkOwner: '',
+    forkBranch: '',
+    fileMask: 'src/main/resources/assets/create/lang/*.json',
+    templatePath: 'src/generated/resources/assets/create/lang/en_us.json',
+    referenceLanguage: 'en_us',
+    role: 'owner',
+  },
+  {
+    id: 2,
+    name: "Farmer's Delight",
+    namespace: 'farmersdelight',
+    description: '农夫乐事：更丰富的农耕与烹饪',
+    repoUrl: 'https://github.com/vectorwing/FarmersDelight',
+    branch: '1.20',
+    forkOwner: '',
+    forkBranch: '',
+    fileMask: 'src/main/resources/assets/farmersdelight/lang/*.json',
+    templatePath: 'src/main/resources/assets/farmersdelight/lang/en_us.json',
+    referenceLanguage: 'en_us',
+    role: 'owner',
+  },
+  {
+    id: 3,
+    name: 'Applied Energistics 2',
+    namespace: 'ae2',
+    description: '应用能源 2：数字化物品存储网络',
+    repoUrl: 'https://github.com/AppliedEnergistics/Applied-Energistics-2',
+    branch: 'main',
+    forkOwner: 'translator',
+    forkBranch: 'zh_cn-translation',
+    fileMask: 'src/main/resources/assets/ae2/lang/*.json',
+    templatePath: 'src/main/resources/assets/ae2/lang/en_us.json',
+    referenceLanguage: 'en_us',
+    role: 'translator',
+  },
 ]
 
-// 模拟数据不区分语言：真实后端按语言统计，这里所有语言返回同一份进度
-const followedProgress: ProjectProgress[] = [
+const followed: ProjectSummary[] = projects.map((p) => ({
+  id: p.id,
+  name: p.name,
+  namespace: p.namespace,
+  description: p.description,
+}))
+
+const parts: Part[] = [
   {
-    ...followed[0],
+    id: 10,
+    projectId: 1,
+    name: 'Create 本体',
+    namespace: 'create',
+    fileMask: 'src/main/resources/assets/create/lang/*.json',
+    templatePath: 'src/generated/resources/assets/create/lang/en_us.json',
+  },
+  {
+    id: 20,
+    projectId: 2,
+    name: "Farmer's Delight 本体",
+    namespace: 'farmersdelight',
+    fileMask: 'src/main/resources/assets/farmersdelight/lang/*.json',
+    templatePath: 'src/main/resources/assets/farmersdelight/lang/en_us.json',
+  },
+  {
+    id: 30,
+    projectId: 3,
+    name: 'AE2 本体',
+    namespace: 'ae2',
+    fileMask: 'src/main/resources/assets/ae2/lang/*.json',
+    templatePath: 'src/main/resources/assets/ae2/lang/en_us.json',
+  },
+]
+
+// 统计数字是示意数据，与条目数量不追求严格对应
+const partStats: Record<number, PartProgress> = {
+  10: {
+    ...parts[0],
     translatedPercent: 50,
     incompleteStrings: 32203,
     incompleteWords: 219570,
@@ -79,8 +169,8 @@ const followedProgress: ProjectProgress[] = [
     suggestions: 26112,
     comments: 0,
   },
-  {
-    ...followed[1],
+  20: {
+    ...parts[1],
     translatedPercent: 100,
     incompleteStrings: 0,
     incompleteWords: 0,
@@ -90,8 +180,8 @@ const followedProgress: ProjectProgress[] = [
     suggestions: 0,
     comments: 0,
   },
-  {
-    ...followed[2],
+  30: {
+    ...parts[2],
     translatedPercent: 33,
     incompleteStrings: 1004,
     incompleteWords: 4000,
@@ -101,7 +191,110 @@ const followedProgress: ProjectProgress[] = [
     suggestions: 946,
     comments: 0,
   },
+}
+
+// 仪表盘项目进度为项目下全部部件的汇总示意，mock 直接沿用了部件口径
+const followedProgress: ProjectProgress[] = projects.map((p) => {
+  const stats = Object.values(partStats).find((s) => s.projectId === p.id) ?? partStats[10]
+  const { id: _partId, projectId: _projectId, ...rest } = stats
+  return { ...p, ...rest }
+})
+
+const members: Record<number, ProjectMember[]> = {
+  1: [
+    { username: 'translator', displayName: '示例译者', avatarUrl: '', role: 'owner' },
+    { username: 'dev-li', displayName: '李开发', avatarUrl: '', role: 'maintainer' },
+    { username: 'alice', displayName: 'Alice', avatarUrl: '', role: 'translator' },
+  ],
+  2: [
+    { username: 'translator', displayName: '示例译者', avatarUrl: '', role: 'owner' },
+    { username: 'bob', displayName: 'Bob', avatarUrl: '', role: 'translator' },
+  ],
+  3: [
+    { username: 'carol', displayName: 'Carol', avatarUrl: '', role: 'owner' },
+    { username: 'translator', displayName: '示例译者', avatarUrl: '', role: 'translator' },
+  ],
+}
+
+// 条目以英文为参考语言原文，zhCn 为简体中文译文，空串表示该条未翻译
+interface MockEntry {
+  key: string
+  source: string
+  zhCn: string
+}
+
+const entries: Record<number, MockEntry[]> = {
+  10: [
+    { key: 'item.create.andesite_alloy', source: 'Andesite Alloy', zhCn: '安山合金' },
+    { key: 'item.create.brass_ingot', source: 'Brass Ingot', zhCn: '黄铜锭' },
+    { key: 'item.create.copper_sheet', source: 'Copper Sheet', zhCn: '铜板' },
+    { key: 'item.create.zinc_ingot', source: 'Zinc Ingot', zhCn: '锌锭' },
+    { key: 'block.create.cogwheel', source: 'Cogwheel', zhCn: '齿轮' },
+    { key: 'block.create.large_cogwheel', source: 'Large Cogwheel', zhCn: '大齿轮' },
+    { key: 'block.create.shaft', source: 'Shaft', zhCn: '传动杆' },
+    { key: 'block.create.belt', source: 'Belt', zhCn: '' },
+    { key: 'block.create.gearbox', source: 'Gearbox', zhCn: '' },
+    { key: 'block.create.mechanical_press', source: 'Mechanical Press', zhCn: '机械压力机' },
+    { key: 'block.create.mechanical_mixer', source: 'Mechanical Mixer', zhCn: '' },
+    { key: 'block.create.crushing_wheel', source: 'Crushing Wheel', zhCn: '' },
+    { key: 'block.create.water_wheel', source: 'Water Wheel', zhCn: '水车' },
+    { key: 'item.create.wrench', source: 'Wrench', zhCn: '扳手' },
+    { key: 'item.create.goggles', source: "Engineer's Goggles", zhCn: '' },
+    { key: 'block.create.depot', source: 'Depot', zhCn: '' },
+  ],
+  20: [
+    { key: 'block.farmersdelight.stove', source: 'Stove', zhCn: '炉灶' },
+    { key: 'block.farmersdelight.cooking_pot', source: 'Cooking Pot', zhCn: '烹饪锅' },
+    { key: 'block.farmersdelight.skillet', source: 'Skillet', zhCn: '煎锅' },
+    { key: 'block.farmersdelight.cutting_board', source: 'Cutting Board', zhCn: '砧板' },
+    { key: 'item.farmersdelight.fried_egg', source: 'Fried Egg', zhCn: '煎蛋' },
+    { key: 'item.farmersdelight.hamburger', source: 'Hamburger', zhCn: '汉堡' },
+    { key: 'item.farmersdelight.dumplings', source: 'Dumplings', zhCn: '饺子' },
+    { key: 'item.farmersdelight.cabbage', source: 'Cabbage', zhCn: '卷心菜' },
+    { key: 'item.farmersdelight.tomato', source: 'Tomato', zhCn: '番茄' },
+    { key: 'item.farmersdelight.onion', source: 'Onion', zhCn: '洋葱' },
+    { key: 'item.farmersdelight.rice', source: 'Rice', zhCn: '稻米' },
+    { key: 'item.farmersdelight.knife', source: 'Knife', zhCn: '小刀' },
+  ],
+  30: [
+    { key: 'item.ae2.certus_quartz_crystal', source: 'Certus Quartz Crystal', zhCn: '赛特斯石英水晶' },
+    { key: 'item.ae2.silicon', source: 'Silicon', zhCn: '硅' },
+    { key: 'block.ae2.controller', source: 'ME Controller', zhCn: 'ME 控制器' },
+    { key: 'block.ae2.interface', source: 'ME Interface', zhCn: 'ME 接口' },
+    { key: 'block.ae2.me_chest', source: 'ME Chest', zhCn: '' },
+    { key: 'block.ae2.drive', source: 'ME Drive', zhCn: '' },
+    { key: 'block.ae2.cable', source: 'ME Glass Cable', zhCn: '' },
+    { key: 'item.ae2.cell_1k', source: '1k ME Storage Cell', zhCn: '' },
+    { key: 'item.ae2.cell_4k', source: '4k ME Storage Cell', zhCn: '' },
+    { key: 'item.ae2.wireless_terminal', source: 'Wireless Terminal', zhCn: '' },
+    { key: 'block.ae2.charger', source: 'Charger', zhCn: '' },
+    { key: 'item.ae2.flux_dust', source: 'Flux Dust', zhCn: '' },
+  ],
+}
+
+// 编辑器保存的译文按 部件|语言|键 存放，覆盖条目初始译文
+const savedTargets: Record<string, string> = {}
+
+const mockUsers: AdminUser[] = [
+  { ...demoUser, email: 'translator@example.com', createdAt: '2026-08-01T09:00:00+08:00' },
+  { id: 2, username: 'dev-li', displayName: '李开发', avatarUrl: '', role: 'user', primaryLanguage: 'zh_cn', secondaryLanguages: [], email: 'dev-li@example.com', createdAt: '2026-08-12T14:30:00+08:00' },
+  { id: 3, username: 'alice', displayName: 'Alice', avatarUrl: '', role: 'user', primaryLanguage: 'en_us', secondaryLanguages: ['zh_cn'], email: 'alice@example.com', createdAt: '2026-09-02T20:15:00+08:00' },
+  { id: 4, username: 'bob', displayName: 'Bob', avatarUrl: '', role: 'user', primaryLanguage: 'en_us', secondaryLanguages: [], email: 'bob@example.com', createdAt: '2026-09-20T08:45:00+08:00' },
+  { id: 5, username: 'carol', displayName: 'Carol', avatarUrl: '', role: 'user', primaryLanguage: 'ja_jp', secondaryLanguages: ['en_us'], email: 'carol@example.com', createdAt: '2026-10-01T11:00:00+08:00' },
 ]
+
+const inviteList: InviteCode[] = [
+  { code: 'WELCOME-2026', createdAt: '2026-09-01T10:00:00+08:00', usedBy: '' },
+  { code: 'BETA-TESTER', createdAt: '2026-09-15T16:00:00+08:00', usedBy: 'alice' },
+]
+
+// support 为空串，演示"更多"菜单对未配置项的隐藏
+let siteLinkConfig: SiteLinks = {
+  contact: 'mailto:admin@transcraft.example.com',
+  docs: 'https://github.com/Dubhe-Studio/TransCraft#readme',
+  contribute: 'https://github.com/Dubhe-Studio/TransCraft',
+  support: '',
+}
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
   res.statusCode = status
@@ -138,6 +331,34 @@ function hasToken(req: IncomingMessage): boolean {
   return req.headers.authorization === `Bearer ${demoToken}`
 }
 
+// 返回 false 表示已响应 401，调用方直接结束
+function requireAuth(req: IncomingMessage, res: ServerResponse): boolean {
+  if (hasToken(req)) {
+    return true
+  }
+  req.resume()
+  sendJson(res, 401, { message: '未登录或会话已过期' })
+  return false
+}
+
+// 返回 false 表示已响应 401/403，调用方直接结束
+function requireAdmin(req: IncomingMessage, res: ServerResponse): boolean {
+  if (!requireAuth(req, res)) {
+    return false
+  }
+  if (sessionUser.role !== 'admin') {
+    req.resume()
+    sendJson(res, 403, { message: '需要管理员权限' })
+    return false
+  }
+  return true
+}
+
+function queryParam(req: IncomingMessage, name: string): string {
+  const query = (req.url ?? '').split('?')[1] ?? ''
+  return new URLSearchParams(query).get(name) ?? ''
+}
+
 const handle: Connect.NextHandleFunction = (req, res, next) => {
   void route(req, res, next).catch((error: unknown) => {
     console.error('[mock-api] 处理请求失败:', error)
@@ -163,6 +384,10 @@ async function route(
   }
   if (req.method === 'GET' && path === '/api/languages') {
     sendJson(res, 200, languages)
+    return
+  }
+  if (req.method === 'GET' && path === '/api/site/links') {
+    sendJson(res, 200, siteLinkConfig)
     return
   }
 
@@ -206,30 +431,341 @@ async function route(
   }
 
   if (req.method === 'GET' && path === '/api/users/me') {
-    if (!hasToken(req)) {
-      req.resume()
-      sendJson(res, 401, { message: '未登录或会话已过期' })
+    if (!requireAuth(req, res)) return
+    sendJson(res, 200, sessionUser)
+    return
+  }
+  if (req.method === 'PUT' && path === '/api/users/me') {
+    if (!requireAuth(req, res)) return
+    const body = await readBody(req)
+    if (typeof body.displayName !== 'string' || typeof body.avatarUrl !== 'string' ||
+        typeof body.primaryLanguage !== 'string' || !Array.isArray(body.secondaryLanguages)) {
+      sendJson(res, 400, { message: '资料字段不完整' })
       return
+    }
+    sessionUser = {
+      ...sessionUser,
+      displayName: body.displayName,
+      avatarUrl: body.avatarUrl,
+      primaryLanguage: body.primaryLanguage,
+      secondaryLanguages: body.secondaryLanguages as string[],
     }
     sendJson(res, 200, sessionUser)
     return
   }
-  if (req.method === 'GET' && path === '/api/projects/followed') {
-    if (!hasToken(req)) {
-      req.resume()
-      sendJson(res, 401, { message: '未登录或会话已过期' })
+  if (req.method === 'POST' && path === '/api/users/me/password') {
+    if (!requireAuth(req, res)) return
+    const body = await readBody(req)
+    if (typeof body.oldPassword !== 'string' || !body.oldPassword ||
+        typeof body.newPassword !== 'string' || !body.newPassword) {
+      sendJson(res, 400, { message: '请填写原密码与新密码' })
       return
     }
+    sendJson(res, 204, undefined)
+    return
+  }
+
+  const userHomeMatch = /^\/api\/users\/([^/]+)$/.exec(path)
+  if (req.method === 'GET' && userHomeMatch) {
+    if (!requireAuth(req, res)) return
+    const name = decodeURIComponent(userHomeMatch[1])
+    const base = name === sessionUser.username
+      ? sessionUser
+      : mockUsers.find((u) => u.username === name)
+    if (!base) {
+      sendJson(res, 404, { message: '用户不存在' })
+      return
+    }
+    const profile: UserPublicProfile = {
+      username: base.username,
+      displayName: base.displayName,
+      avatarUrl: base.avatarUrl,
+      primaryLanguage: base.primaryLanguage,
+      secondaryLanguages: base.secondaryLanguages,
+      followed: base.username === 'translator' ? followed : followed.slice(0, 1),
+    }
+    sendJson(res, 200, profile)
+    return
+  }
+
+  if (req.method === 'GET' && path === '/api/projects/followed') {
+    if (!requireAuth(req, res)) return
     sendJson(res, 200, followed)
     return
   }
   if (req.method === 'GET' && path === '/api/projects/followed/progress') {
-    if (!hasToken(req)) {
-      req.resume()
-      sendJson(res, 401, { message: '未登录或会话已过期' })
+    if (!requireAuth(req, res)) return
+    sendJson(res, 200, followedProgress)
+    return
+  }
+  if (req.method === 'POST' && path === '/api/projects') {
+    if (!requireAuth(req, res)) return
+    const body = await readBody(req)
+    if (typeof body.name !== 'string' || !body.name ||
+        typeof body.namespace !== 'string' || !body.namespace ||
+        typeof body.repoUrl !== 'string' || !body.repoUrl) {
+      sendJson(res, 400, { message: '项目名称、命名空间与仓库地址不能为空' })
       return
     }
-    sendJson(res, 200, followedProgress)
+    const created: ProjectDetail = {
+      id: Math.max(...projects.map((p) => p.id)) + 1,
+      name: body.name,
+      namespace: body.namespace,
+      description: typeof body.description === 'string' ? body.description : '',
+      repoUrl: body.repoUrl,
+      branch: typeof body.branch === 'string' && body.branch ? body.branch : 'main',
+      forkOwner: typeof body.forkOwner === 'string' ? body.forkOwner : '',
+      forkBranch: typeof body.forkBranch === 'string' ? body.forkBranch : '',
+      fileMask: typeof body.fileMask === 'string' ? body.fileMask : '',
+      templatePath: typeof body.templatePath === 'string' ? body.templatePath : '',
+      referenceLanguage: typeof body.referenceLanguage === 'string' && body.referenceLanguage ? body.referenceLanguage : 'en_us',
+      // 创建者即为项目所有者
+      role: 'owner',
+    }
+    projects.push(created)
+    followed.push({ id: created.id, name: created.name, namespace: created.namespace, description: created.description })
+    sendJson(res, 200, created)
+    return
+  }
+
+  const projectMatch = /^\/api\/projects\/(\d+)$/.exec(path)
+  if (projectMatch && req.method === 'GET') {
+    if (!requireAuth(req, res)) return
+    const found = projects.find((p) => p.id === Number(projectMatch[1]))
+    if (!found) {
+      sendJson(res, 404, { message: '项目不存在' })
+      return
+    }
+    sendJson(res, 200, found)
+    return
+  }
+  if (projectMatch && req.method === 'PUT') {
+    if (!requireAuth(req, res)) return
+    const found = projects.find((p) => p.id === Number(projectMatch[1]))
+    if (!found) {
+      sendJson(res, 404, { message: '项目不存在' })
+      return
+    }
+    const body = await readBody(req)
+    if (typeof body.name !== 'string' || !body.name ||
+        typeof body.namespace !== 'string' || !body.namespace ||
+        typeof body.repoUrl !== 'string' || !body.repoUrl) {
+      sendJson(res, 400, { message: '项目名称、命名空间与仓库地址不能为空' })
+      return
+    }
+    found.name = body.name
+    found.namespace = body.namespace
+    found.description = typeof body.description === 'string' ? body.description : ''
+    found.repoUrl = body.repoUrl
+    found.branch = typeof body.branch === 'string' && body.branch ? body.branch : found.branch
+    found.forkOwner = typeof body.forkOwner === 'string' ? body.forkOwner : ''
+    found.forkBranch = typeof body.forkBranch === 'string' ? body.forkBranch : ''
+    found.fileMask = typeof body.fileMask === 'string' ? body.fileMask : ''
+    found.templatePath = typeof body.templatePath === 'string' ? body.templatePath : ''
+    found.referenceLanguage = typeof body.referenceLanguage === 'string' && body.referenceLanguage ? body.referenceLanguage : found.referenceLanguage
+    const summary = followed.find((p) => p.id === found.id)
+    if (summary) {
+      summary.name = found.name
+      summary.namespace = found.namespace
+      summary.description = found.description
+    }
+    sendJson(res, 200, found)
+    return
+  }
+
+  const projectProgressMatch = /^\/api\/projects\/(\d+)\/progress$/.exec(path)
+  if (req.method === 'GET' && projectProgressMatch) {
+    if (!requireAuth(req, res)) return
+    const projectId = Number(projectProgressMatch[1])
+    const list = Object.values(partStats).filter((s) => s.projectId === projectId)
+    sendJson(res, 200, list)
+    return
+  }
+
+  const membersMatch = /^\/api\/projects\/(\d+)\/members$/.exec(path)
+  if (req.method === 'GET' && membersMatch) {
+    if (!requireAuth(req, res)) return
+    sendJson(res, 200, members[Number(membersMatch[1])] ?? [])
+    return
+  }
+  if (req.method === 'POST' && membersMatch) {
+    if (!requireAuth(req, res)) return
+    const projectId = Number(membersMatch[1])
+    const body = await readBody(req)
+    if (typeof body.username !== 'string' || !body.username) {
+      sendJson(res, 400, { message: '用户名不能为空' })
+      return
+    }
+    const user = mockUsers.find((u) => u.username === body.username)
+    if (!user) {
+      sendJson(res, 404, { message: '用户不存在' })
+      return
+    }
+    const role = body.role === 'owner' || body.role === 'maintainer' ? body.role : 'translator'
+    const list = members[projectId] ?? []
+    list.push({ username: user.username, displayName: user.displayName, avatarUrl: user.avatarUrl, role })
+    members[projectId] = list
+    sendJson(res, 200, list)
+    return
+  }
+
+  const removeMemberMatch = /^\/api\/projects\/(\d+)\/members\/([^/]+)$/.exec(path)
+  if (req.method === 'DELETE' && removeMemberMatch) {
+    if (!requireAuth(req, res)) return
+    const projectId = Number(removeMemberMatch[1])
+    const name = decodeURIComponent(removeMemberMatch[2])
+    members[projectId] = (members[projectId] ?? []).filter((m) => m.username !== name)
+    sendJson(res, 204, undefined)
+    return
+  }
+
+  if (req.method === 'POST' && path === '/api/parts') {
+    if (!requireAuth(req, res)) return
+    const body = await readBody(req)
+    if (typeof body.projectId !== 'number' ||
+        typeof body.name !== 'string' || !body.name ||
+        typeof body.namespace !== 'string' || !body.namespace) {
+      sendJson(res, 400, { message: '所属项目、部件名称与命名空间不能为空' })
+      return
+    }
+    const input = body as unknown as PartInput
+    const created: Part = {
+      id: Math.max(...parts.map((p) => p.id)) + 1,
+      projectId: input.projectId,
+      name: input.name,
+      namespace: input.namespace,
+      fileMask: input.fileMask,
+      templatePath: input.templatePath,
+    }
+    parts.push(created)
+    sendJson(res, 200, created)
+    return
+  }
+
+  const partMatch = /^\/api\/parts\/(\d+)$/.exec(path)
+  if (req.method === 'GET' && partMatch) {
+    if (!requireAuth(req, res)) return
+    const found = parts.find((p) => p.id === Number(partMatch[1]))
+    if (!found) {
+      sendJson(res, 404, { message: '部件不存在' })
+      return
+    }
+    const detail: PartDetail = {
+      ...found,
+      projectName: projects.find((p) => p.id === found.projectId)?.name ?? '',
+    }
+    sendJson(res, 200, detail)
+    return
+  }
+
+  const entriesMatch = /^\/api\/parts\/(\d+)\/entries$/.exec(path)
+  if (req.method === 'GET' && entriesMatch) {
+    if (!requireAuth(req, res)) return
+    const partId = Number(entriesMatch[1])
+    const lang = queryParam(req, 'lang')
+    const list = entries[partId] ?? []
+    const result: TranslationEntry[] = list.map((entry) => ({
+      key: entry.key,
+      source: entry.source,
+      target: savedTargets[`${partId}|${lang}|${entry.key}`] ?? (lang === 'zh_cn' ? entry.zhCn : ''),
+    }))
+    sendJson(res, 200, result)
+    return
+  }
+
+  const saveEntryMatch = /^\/api\/parts\/(\d+)\/entries\/([^/]+)$/.exec(path)
+  if (req.method === 'PUT' && saveEntryMatch) {
+    if (!requireAuth(req, res)) return
+    const partId = Number(saveEntryMatch[1])
+    const key = decodeURIComponent(saveEntryMatch[2])
+    const lang = queryParam(req, 'lang')
+    const body = await readBody(req)
+    if (typeof body.text !== 'string') {
+      sendJson(res, 400, { message: '缺少译文内容' })
+      return
+    }
+    if (!(entries[partId] ?? []).some((entry) => entry.key === key)) {
+      sendJson(res, 404, { message: '条目不存在' })
+      return
+    }
+    savedTargets[`${partId}|${lang}|${key}`] = body.text
+    sendJson(res, 204, undefined)
+    return
+  }
+
+  if (req.method === 'GET' && path === '/api/admin/users') {
+    if (!requireAdmin(req, res)) return
+    const list = mockUsers.map((u) => (u.username === sessionUser.username ? { ...u, ...sessionUser } : u))
+    sendJson(res, 200, list)
+    return
+  }
+
+  const roleMatch = /^\/api\/admin\/users\/([^/]+)\/role$/.exec(path)
+  if (req.method === 'PUT' && roleMatch) {
+    if (!requireAdmin(req, res)) return
+    const name = decodeURIComponent(roleMatch[1])
+    const body = await readBody(req)
+    if (body.role !== 'admin' && body.role !== 'owner' && body.role !== 'user') {
+      sendJson(res, 400, { message: '角色取值不合法' })
+      return
+    }
+    const found = mockUsers.find((u) => u.username === name)
+    if (!found) {
+      sendJson(res, 404, { message: '用户不存在' })
+      return
+    }
+    found.role = body.role
+    if (name === sessionUser.username) {
+      sessionUser = { ...sessionUser, role: body.role }
+    }
+    sendJson(res, 204, undefined)
+    return
+  }
+
+  if (req.method === 'GET' && path === '/api/admin/invites') {
+    if (!requireAdmin(req, res)) return
+    sendJson(res, 200, inviteList)
+    return
+  }
+  if (req.method === 'POST' && path === '/api/admin/invites') {
+    if (!requireAdmin(req, res)) return
+    const created: InviteCode = {
+      code: `INVITE-${String(inviteList.length + 1).padStart(4, '0')}`,
+      createdAt: new Date().toISOString(),
+      usedBy: '',
+    }
+    inviteList.push(created)
+    sendJson(res, 200, created)
+    return
+  }
+
+  const inviteMatch = /^\/api\/admin\/invites\/([^/]+)$/.exec(path)
+  if (req.method === 'DELETE' && inviteMatch) {
+    if (!requireAdmin(req, res)) return
+    const code = decodeURIComponent(inviteMatch[1])
+    const index = inviteList.findIndex((i) => i.code === code)
+    if (index >= 0) {
+      inviteList.splice(index, 1)
+    }
+    sendJson(res, 204, undefined)
+    return
+  }
+
+  if (req.method === 'PUT' && path === '/api/admin/site-links') {
+    if (!requireAdmin(req, res)) return
+    const body = await readBody(req)
+    if (typeof body.contact !== 'string' || typeof body.docs !== 'string' ||
+        typeof body.contribute !== 'string' || typeof body.support !== 'string') {
+      sendJson(res, 400, { message: '链接字段不完整' })
+      return
+    }
+    siteLinkConfig = {
+      contact: body.contact,
+      docs: body.docs,
+      contribute: body.contribute,
+      support: body.support,
+    }
+    sendJson(res, 200, siteLinkConfig)
     return
   }
 
