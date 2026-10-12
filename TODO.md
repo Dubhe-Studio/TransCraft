@@ -7,6 +7,7 @@
 ## 当前进度
 
 - [x] 项目脚手架：Golang + Hertz 后端、Vite + Vue 3 + Arco Design 前端、前后端同源部署、MySQL / PostgreSQL / Redis 依赖环境
+- 第一阶段全部页面已由前端实现并通过模拟接口联调，后端实现完成后方可勾选第一阶段各项
 
 ## 第一阶段
 
