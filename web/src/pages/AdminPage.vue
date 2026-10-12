@@ -44,6 +44,7 @@ onMounted(load)
 async function changeRole(user: AdminUser, role: UserRole) {
   try {
     await updateUserRole(user.username, role)
+    user.role = role
     Message.success(`已将 ${user.displayName} 的角色调整为${roleLabels[role]}`)
   } catch (error) {
     console.error('调整用户角色失败:', error)
@@ -81,7 +82,7 @@ async function saveLinks() {
   linksSaving.value = true
   try {
     await updateSiteLinks({ ...linksForm })
-    Message.success('站点链接已保存，顶栏"更多"菜单即时生效')
+    Message.success('站点链接已保存，顶栏「更多」菜单在下次进入站点时生效')
   } catch (error) {
     console.error('保存站点链接失败:', error)
     Message.error(error instanceof Error ? error.message : '保存失败')

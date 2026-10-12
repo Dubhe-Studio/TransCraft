@@ -62,9 +62,19 @@ async function load() {
   }
 }
 
-// 部件进度跟随当前工作语言变化
+// 部件进度跟随当前工作语言变化；快速切换时旧请求不得覆盖新数据
+let partsSeq = 0
 watch(() => ui.currentLanguage, async () => {
-  partRows.value = await projectProgress(projectId, ui.currentLanguage)
+  const seq = ++partsSeq
+  try {
+    const rows = await projectProgress(projectId, ui.currentLanguage)
+    if (seq !== partsSeq) return
+    partRows.value = rows
+  } catch (error) {
+    if (seq !== partsSeq) return
+    console.error('加载部件进度失败:', error)
+    Message.error(error instanceof Error ? error.message : '加载部件进度失败')
+  }
 })
 
 onMounted(load)
@@ -74,21 +84,23 @@ const addVisible = ref(false)
 const addForm = reactive<{ username: string; role: ProjectRole }>({ username: '', role: 'translator' })
 const addSubmitting = ref(false)
 
-async function submitAddMember() {
+// 返回是否允许关闭弹窗，校验失败或提交失败时保持弹窗打开
+async function submitAddMember(): Promise<boolean> {
   if (!addForm.username) {
     Message.error('用户名不能为空')
-    return
+    return false
   }
   addSubmitting.value = true
   try {
     memberList.value = await addMember(projectId, addForm.username, addForm.role)
     Message.success('成员已添加')
-    addVisible.value = false
     addForm.username = ''
     addForm.role = 'translator'
+    return true
   } catch (error) {
     console.error('添加成员失败:', error)
     Message.error(error instanceof Error ? error.message : '添加失败')
+    return false
   } finally {
     addSubmitting.value = false
   }
@@ -255,7 +267,7 @@ async function saveSettings() {
           </a-tab-pane>
         </a-tabs>
 
-        <a-modal v-model:visible="addVisible" title="添加成员" :ok-loading="addSubmitting" @ok="submitAddMember">
+        <a-modal v-model:visible="addVisible" title="添加成员" :ok-loading="addSubmitting" :on-before-ok="submitAddMember">
           <a-form :model="addForm" layout="vertical">
             <a-form-item label="用户名" required>
               <a-input v-model="addForm.username" placeholder="输入用户名" allow-clear />

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Message } from '@arco-design/web-vue'
+import { Message, Modal } from '@arco-design/web-vue'
 import { partDetail, partEntries, saveTranslation } from '../api/part'
 import type { PartDetail, TranslationEntry } from '../api/types'
 import { useUiStore } from '../stores/ui'
@@ -37,7 +37,11 @@ const selected = computed(() => entries.value.find((e) => e.key === selectedKey.
 const draft = ref('')
 const saving = ref(false)
 
+// 语言快速切换时旧请求不得覆盖新数据
+let loadSeq = 0
+
 async function load() {
+  const seq = ++loadSeq
   loading.value = true
   loadError.value = ''
   try {
@@ -45,34 +49,56 @@ async function load() {
       partDetail(partId),
       partEntries(partId, ui.currentLanguage),
     ])
+    if (seq !== loadSeq) return
     part.value = partInfo
     entries.value = list
     selectedKey.value = list[0]?.key ?? ''
     draft.value = list[0]?.target ?? ''
   } catch (error) {
+    if (seq !== loadSeq) return
     console.error('加载翻译条目失败:', error)
     loadError.value = error instanceof Error ? error.message : '加载失败'
   } finally {
-    loading.value = false
+    if (seq === loadSeq) {
+      loading.value = false
+    }
   }
 }
 
+// 切换条目或语言前，当前译文若未保存需经用户确认丢弃
+function confirmDiscardDraft(next: () => void) {
+  if (selected.value && draft.value !== selected.value.target) {
+    Modal.confirm({
+      title: '未保存的修改',
+      content: '当前译文尚未保存，切换后将丢失。确定继续吗？',
+      onOk: next,
+    })
+    return
+  }
+  next()
+}
+
 // 条目译文跟随当前工作语言变化
-watch(() => ui.currentLanguage, load)
+watch(() => ui.currentLanguage, () => confirmDiscardDraft(load))
 
 onMounted(load)
 
 function selectEntry(entry: TranslationEntry) {
-  selectedKey.value = entry.key
-  draft.value = entry.target
+  confirmDiscardDraft(() => {
+    selectedKey.value = entry.key
+    draft.value = entry.target
+  })
 }
 
 async function save() {
-  if (!selected.value) return
+  // 先捕获当前条目引用，await 期间用户切换条目也不会写错目标
+  const entry = selected.value
+  if (!entry) return
+  const text = draft.value
   saving.value = true
   try {
-    await saveTranslation(partId, ui.currentLanguage, selected.value.key, draft.value)
-    selected.value.target = draft.value
+    await saveTranslation(partId, ui.currentLanguage, entry.key, text)
+    entry.target = text
     Message.success('译文已保存')
   } catch (error) {
     console.error('保存译文失败:', error)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { supportedLanguages } from '../api/language'
 import { changePassword, updateMe } from '../api/user'
@@ -26,14 +26,27 @@ const passwordForm = reactive({
 const passwordSaving = ref(false)
 
 onMounted(async () => {
-  languageList.value = await supportedLanguages()
-  if (auth.user) {
-    profileForm.displayName = auth.user.displayName
-    profileForm.avatarUrl = auth.user.avatarUrl
-    profileForm.primaryLanguage = auth.user.primaryLanguage
-    profileForm.secondaryLanguages = [...auth.user.secondaryLanguages]
+  try {
+    languageList.value = await supportedLanguages()
+  } catch (error) {
+    console.error('加载语言列表失败:', error)
+    Message.error('加载语言列表失败，请刷新重试')
   }
 })
+
+// 会话用户可能晚于本页挂载到达（刷新直达时 MainLayout 的 fetchMe 未完成），
+// 因此跟随 user 变化填表，immediate 覆盖用户已就绪的情形
+watch(
+  () => auth.user,
+  (user) => {
+    if (!user) return
+    profileForm.displayName = user.displayName
+    profileForm.avatarUrl = user.avatarUrl
+    profileForm.primaryLanguage = user.primaryLanguage
+    profileForm.secondaryLanguages = [...user.secondaryLanguages]
+  },
+  { immediate: true },
+)
 
 async function saveProfile() {
   profileSaving.value = true

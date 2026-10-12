@@ -12,17 +12,25 @@ const ui = useUiStore()
 const projects = ref<ProjectProgress[]>([])
 const loading = ref(true)
 const loadError = ref('')
+// 语言快速切换时旧请求不得覆盖新数据
+let loadSeq = 0
 
 async function load() {
+  const seq = ++loadSeq
   loading.value = true
   loadError.value = ''
   try {
-    projects.value = await followedProgress(ui.currentLanguage)
+    const list = await followedProgress(ui.currentLanguage)
+    if (seq !== loadSeq) return
+    projects.value = list
   } catch (error) {
+    if (seq !== loadSeq) return
     console.error('加载关注的项目失败:', error)
     loadError.value = error instanceof Error ? error.message : '加载失败'
   } finally {
-    loading.value = false
+    if (seq === loadSeq) {
+      loading.value = false
+    }
   }
 }
 

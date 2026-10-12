@@ -21,7 +21,12 @@ const form = reactive<PartInput>({
 const submitting = ref(false)
 
 onMounted(async () => {
-  projects.value = await followedProjects()
+  try {
+    projects.value = await followedProjects()
+  } catch (error) {
+    console.error('加载项目列表失败:', error)
+    Message.error('加载项目列表失败，请刷新重试')
+  }
 })
 
 async function submit() {
@@ -44,7 +49,16 @@ async function submit() {
     <a-typography-title :heading="5">添加部件</a-typography-title>
 
     <a-form :model="form" layout="vertical" class="component-new__form" @submit-success="submit">
-      <a-form-item field="projectId" label="所属项目" required :rules="[{ required: true, message: '请选择所属项目' }]">
+      <a-form-item
+        field="projectId"
+        label="所属项目"
+        required
+        :rules="[
+          { required: true, message: '请选择所属项目' },
+          // projectId 初值为 0，required 对数字 0 视为已填，需另行拦截未选择的情形
+          { validator: (value, fail) => { if (!value) fail('请选择所属项目') } },
+        ]"
+      >
         <a-select
           v-model="form.projectId"
           placeholder="选择项目"
@@ -67,7 +81,7 @@ async function submit() {
       <a-form-item>
         <a-space>
           <a-button type="primary" html-type="submit" :loading="submitting">创建部件</a-button>
-          <a-button @click="router.back()">取消</a-button>
+          <a-button @click="router.push({ name: 'dashboard' })">取消</a-button>
         </a-space>
       </a-form-item>
     </a-form>

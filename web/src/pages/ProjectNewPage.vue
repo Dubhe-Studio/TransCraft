@@ -26,7 +26,12 @@ const form = reactive<ProjectInput>({
 const submitting = ref(false)
 
 onMounted(async () => {
-  languageList.value = await supportedLanguages()
+  try {
+    languageList.value = await supportedLanguages()
+  } catch (error) {
+    console.error('加载语言列表失败:', error)
+    Message.error('加载语言列表失败，请刷新重试')
+  }
 })
 
 async function submit() {
@@ -83,7 +88,7 @@ async function submit() {
       <a-form-item>
         <a-space>
           <a-button type="primary" html-type="submit" :loading="submitting">创建项目</a-button>
-          <a-button @click="router.back()">取消</a-button>
+          <a-button @click="router.push({ name: 'dashboard' })">取消</a-button>
         </a-space>
       </a-form-item>
     </a-form>

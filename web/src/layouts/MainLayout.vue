@@ -212,7 +212,8 @@ onMounted(async () => {
     </a-layout-header>
 
     <a-layout-content class="shell__content">
-      <router-view />
+      <!-- 以完整路径为键强制整页重挂载，避免同组件在不同路由参数间复用时展示旧数据 -->
+      <router-view :key="route.fullPath" />
     </a-layout-content>
   </a-layout>
 </template>

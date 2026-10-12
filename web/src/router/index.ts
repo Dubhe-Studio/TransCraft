@@ -19,6 +19,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     guest?: boolean
     requiresAuth?: boolean
+    requiresAdmin?: boolean
     title?: string
   }
 }
@@ -41,7 +42,7 @@ export const router = createRouter({
         { path: 'parts/:id/translate', name: 'part-translate', component: PartTranslatePage, meta: { title: '翻译' } },
         { path: 'settings', name: 'settings', component: SettingsPage, meta: { title: '设置' } },
         { path: 'users/:name', name: 'user-home', component: UserHomePage, meta: { title: '用户主页' } },
-        { path: 'admin', name: 'admin', component: AdminPage, meta: { title: '管理' } },
+        { path: 'admin', name: 'admin', component: AdminPage, meta: { title: '管理', requiresAdmin: true } },
         { path: 'about', name: 'about', component: AboutPage, meta: { title: '关于' } },
       ],
     },
@@ -49,7 +50,7 @@ export const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
   // 未登录访问受保护页面时记录目标地址，登录成功后跳回
   if (to.matched.some((record) => record.meta.requiresAuth) && !auth.isLoggedIn) {
@@ -57,6 +58,18 @@ router.beforeEach((to) => {
   }
   if (to.meta.guest && auth.isLoggedIn) {
     return { path: redirectTarget(to.query) }
+  }
+  // 管理页除后端 403 兜底外，前端按会话角色拦截，避免普通用户手输地址进入
+  if (to.meta.requiresAdmin) {
+    try {
+      await auth.fetchMe()
+    } catch (error) {
+      console.error('校验管理权限失败:', error)
+      return { name: 'dashboard' }
+    }
+    if (!auth.canManage) {
+      return { name: 'dashboard' }
+    }
   }
   return true
 })
