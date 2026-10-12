@@ -5,7 +5,8 @@ import { Message } from '@arco-design/web-vue'
 import { ApiError } from '../api/client'
 import { followedProjects } from '../api/project'
 import { supportedLanguages } from '../api/language'
-import type { LanguageInfo, ProjectSummary } from '../api/types'
+import { siteLinks } from '../api/site'
+import type { LanguageInfo, ProjectSummary, SiteLinks } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 
@@ -18,6 +19,20 @@ const followed = ref<ProjectSummary[]>([])
 const languages = ref<LanguageInfo[]>([])
 const followedFailed = ref(false)
 const languagesFailed = ref(false)
+// 顶栏"更多"菜单的外链，未配置的项不展示
+const links = ref<SiteLinks>({ contact: '', docs: '', contribute: '', support: '' })
+
+async function loadSiteLinks() {
+  try {
+    links.value = await siteLinks()
+  } catch (error) {
+    console.error('加载站点链接失败:', error)
+  }
+}
+
+function openLink(url: string) {
+  window.open(url, '_blank', 'noopener')
+}
 
 async function loadFollowed() {
   try {
@@ -78,7 +93,7 @@ onMounted(async () => {
     Message.error('加载用户信息失败')
   }
 
-  await Promise.all([loadFollowed(), loadLanguages()])
+  await Promise.all([loadFollowed(), loadLanguages(), loadSiteLinks()])
 })
 </script>
 
@@ -186,11 +201,10 @@ onMounted(async () => {
         <a-dropdown trigger="hover">
           <span class="shell__nav-item"><icon-more /> 更多</span>
           <template #content>
-            <!-- TODO: 联系管理员 / 文档 / 贡献 / 支持的目标链接待站点配置功能提供后接入；跟踪：TODO.md -->
-            <a-doption disabled>联系管理员</a-doption>
-            <a-doption disabled>文档</a-doption>
-            <a-doption disabled>贡献</a-doption>
-            <a-doption disabled>支持</a-doption>
+            <a-doption v-if="links.contact" @click="openLink(links.contact)">联系管理员</a-doption>
+            <a-doption v-if="links.docs" @click="openLink(links.docs)">文档</a-doption>
+            <a-doption v-if="links.contribute" @click="openLink(links.contribute)">贡献</a-doption>
+            <a-doption v-if="links.support" @click="openLink(links.support)">支持</a-doption>
             <a-doption @click="router.push({ name: 'about' })">关于</a-doption>
           </template>
         </a-dropdown>

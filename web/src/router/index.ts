@@ -12,7 +12,8 @@ import ComponentNewPage from '../pages/ComponentNewPage.vue'
 import PartTranslatePage from '../pages/PartTranslatePage.vue'
 import SettingsPage from '../pages/SettingsPage.vue'
 import UserHomePage from '../pages/UserHomePage.vue'
-import PlaceholderPage from '../pages/PlaceholderPage.vue'
+import AdminPage from '../pages/AdminPage.vue'
+import AboutPage from '../pages/AboutPage.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -38,11 +39,10 @@ export const router = createRouter({
         { path: 'projects/:id', name: 'project-detail', component: ProjectDetailPage, meta: { title: '项目详情' } },
         { path: 'components/new', name: 'component-new', component: ComponentNewPage, meta: { title: '添加部件' } },
         { path: 'parts/:id/translate', name: 'part-translate', component: PartTranslatePage, meta: { title: '翻译' } },
-        // TODO: 以下均为用户确认的占位路由，对应功能落地后逐个替换为真实页面；跟踪 TODO.md 第一阶段
         { path: 'settings', name: 'settings', component: SettingsPage, meta: { title: '设置' } },
         { path: 'users/:name', name: 'user-home', component: UserHomePage, meta: { title: '用户主页' } },
-        { path: 'admin', name: 'admin', component: PlaceholderPage, meta: { title: '管理' } },
-        { path: 'about', name: 'about', component: PlaceholderPage, meta: { title: '关于' } },
+        { path: 'admin', name: 'admin', component: AdminPage, meta: { title: '管理' } },
+        { path: 'about', name: 'about', component: AboutPage, meta: { title: '关于' } },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
