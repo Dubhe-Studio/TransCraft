@@ -14,6 +14,7 @@ import SettingsPage from '../pages/SettingsPage.vue'
 import UserHomePage from '../pages/UserHomePage.vue'
 import AdminPage from '../pages/AdminPage.vue'
 import AboutPage from '../pages/AboutPage.vue'
+import ProjectsPage from '../pages/ProjectsPage.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -37,6 +38,7 @@ export const router = createRouter({
         { path: '', redirect: '/dashboard' },
         { path: 'dashboard', name: 'dashboard', component: DashboardPage, meta: { title: 'Dashboard' } },
         { path: 'projects/new', name: 'project-new', component: ProjectNewPage, meta: { title: '添加项目' } },
+        { path: 'projects', name: 'projects', component: ProjectsPage, meta: { title: '全部项目' } },
         { path: 'projects/:id', name: 'project-detail', component: ProjectDetailPage, meta: { title: '项目详情' } },
         { path: 'components/new', name: 'component-new', component: ComponentNewPage, meta: { title: '添加部件' } },
         { path: 'parts/:id/translate', name: 'part-translate', component: PartTranslatePage, meta: { title: '翻译' } },

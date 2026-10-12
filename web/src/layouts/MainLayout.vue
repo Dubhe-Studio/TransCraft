@@ -127,6 +127,8 @@ onMounted(async () => {
               >
                 {{ project.name }}
               </a-doption>
+              <a-divider class="shell__dropdown-divider" />
+              <a-doption @click="router.push({ name: 'projects' })">全部项目</a-doption>
             </template>
           </a-dropdown>
 
@@ -277,6 +279,11 @@ onMounted(async () => {
   &__avatar {
     cursor: pointer;
     background-color: rgb(var(--primary-6));
+  }
+
+  // 下拉内的分割线紧凑化，避免默认间距把短菜单撑得过高
+  &__dropdown-divider {
+    margin: 4px 0;
   }
 
   &__content {
