@@ -32,16 +32,24 @@ const submitting = ref(false)
 const syncFileMask = computed(() => selectedProject.value?.fileMask ?? '')
 const syncTemplatePath = computed(() => selectedProject.value?.templatePath ?? '')
 
+// 连续切换所属项目时后到响应不得覆盖先选项目的配置
+let projectSeq = 0
+
 watch(
   () => form.projectId,
   async (projectId) => {
+    const seq = ++projectSeq
     if (!projectId) {
       selectedProject.value = null
       return
     }
     try {
-      selectedProject.value = await projectDetail(projectId)
+      const detail = await projectDetail(projectId)
+      if (seq !== projectSeq) return
+      selectedProject.value = detail
     } catch (error) {
+      if (seq !== projectSeq) return
+      selectedProject.value = null
       console.error('加载项目配置失败:', error)
       Message.error('加载项目配置失败，请刷新重试')
     }

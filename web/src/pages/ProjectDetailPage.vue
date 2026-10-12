@@ -24,6 +24,7 @@ import type {
   LanguageProgress as LanguageProgressRow,
   PartInput,
   PartProgress,
+  ProgressRow,
   ProjectDetail,
   ProjectGroup,
   ProjectInput,
@@ -239,6 +240,12 @@ async function saveSettings() {
   }
 }
 
+// 经 store 的 setter 切换以写入本地记录，刷新后不丢语言；切换会触发 watch 重新加载
+// Arco change 事件的值类型含多选数组形态，此处统一按单值取字符串
+function changeLanguage(value: string | number | boolean | Record<string, unknown> | (string | number | boolean | Record<string, unknown>)[]) {
+  ui.setCurrentLanguage(String(value))
+}
+
 // 部件配置弹窗：fileMask/templatePath 为空表示从项目同步，用独立布尔承载同步开关
 const partVisible = ref(false)
 const partEditing = ref<PartProgress | null>(null)
@@ -257,18 +264,21 @@ const partForm = reactive<PartInput>({
 const fileMaskSync = ref(true)
 const templatePathSync = ref(true)
 
-function openEditPart(row: PartProgress) {
-  partEditing.value = row
-  partForm.name = row.name
-  partForm.namespace = row.namespace
-  partForm.repoUrl = row.repoUrl
-  partForm.branch = row.branch
-  partForm.forkOwner = row.forkOwner
-  partForm.forkBranch = row.forkBranch
-  partForm.fileMask = row.fileMask
-  partForm.templatePath = row.templatePath
-  fileMaskSync.value = row.fileMask === ''
-  templatePathSync.value = row.templatePath === ''
+// 表格插槽只暴露 ProgressRow，部件的 VCS 等完整字段从 partRows 里按 id 取回
+function openEditPart(row: ProgressRow) {
+  const part = partRows.value.find((p) => p.id === row.id)
+  if (!part) return
+  partEditing.value = part
+  partForm.name = part.name
+  partForm.namespace = part.namespace
+  partForm.repoUrl = part.repoUrl
+  partForm.branch = part.branch
+  partForm.forkOwner = part.forkOwner
+  partForm.forkBranch = part.forkBranch
+  partForm.fileMask = part.fileMask
+  partForm.templatePath = part.templatePath
+  fileMaskSync.value = part.fileMask === ''
+  templatePathSync.value = part.templatePath === ''
   partVisible.value = true
 }
 
@@ -336,7 +346,11 @@ async function submitPart(): Promise<boolean> {
         <a-tabs default-active-key="parts">
           <a-tab-pane key="parts" title="部件">
             <div class="project-detail__tab-actions">
-              <a-select v-model="ui.currentLanguage" class="project-detail__lang-select">
+              <a-select
+                :model-value="ui.currentLanguage"
+                class="project-detail__lang-select"
+                @change="changeLanguage"
+              >
                 <a-option v-for="lang in languageList" :key="lang.code" :value="lang.code">
                   {{ lang.name }}
                 </a-option>
@@ -363,7 +377,7 @@ async function submitPart(): Promise<boolean> {
                     v-if="canManage"
                     type="text"
                     size="mini"
-                    @click.stop="openEditPart(row as PartProgress)"
+                    @click.stop="openEditPart(row)"
                   >
                     编辑
                   </a-button>

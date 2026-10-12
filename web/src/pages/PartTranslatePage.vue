@@ -109,8 +109,28 @@ function confirmDiscardDraft(next: () => void) {
   next()
 }
 
-// 条目译文跟随当前工作语言变化
-watch(() => ui.currentLanguage, () => confirmDiscardDraft(load))
+// 页内选择器先经确认再写入 store，避免取消后显示语言与条目数据脱节；标记位防止 watch 二次弹窗
+let suppressLanguageConfirm = false
+
+// Arco change 事件的值类型含多选数组形态，此处统一按单值取字符串
+function changeLanguage(value: string | number | boolean | Record<string, unknown> | (string | number | boolean | Record<string, unknown>)[]) {
+  const code = String(value)
+  if (code === ui.currentLanguage) return
+  confirmDiscardDraft(() => {
+    suppressLanguageConfirm = true
+    ui.setCurrentLanguage(code)
+  })
+}
+
+// 条目译文跟随当前工作语言变化；顶栏菜单的切换没有前置确认，在这里拦截未保存修改
+watch(() => ui.currentLanguage, () => {
+  if (suppressLanguageConfirm) {
+    suppressLanguageConfirm = false
+    load()
+    return
+  }
+  confirmDiscardDraft(load)
+})
 
 onMounted(load)
 
@@ -158,6 +178,8 @@ async function persistDraft(): Promise<boolean> {
     entry.target = text
     // 译文被修改后原批准结论不再成立
     entry.approved = false
+    // 完成情况按已存译文实时计算，保存后同步刷新
+    languageRows.value = await partLanguageProgress(partId)
     return true
   } catch (error) {
     console.error('保存译文失败:', error)
@@ -242,7 +264,11 @@ async function submitSuggestion(): Promise<boolean> {
             <a-typography-text type="secondary">{{ part.namespace }}</a-typography-text>
           </div>
           <a-space>
-            <a-select v-model="ui.currentLanguage" class="translate__lang-select">
+            <a-select
+              :model-value="ui.currentLanguage"
+              class="translate__lang-select"
+              @change="changeLanguage"
+            >
               <a-option v-for="lang in languageList" :key="lang.code" :value="lang.code">
                 {{ lang.name }}
               </a-option>

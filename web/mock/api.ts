@@ -214,11 +214,24 @@ const emptyStats: ProgressStats = {
   comments: 0,
 }
 
-// 仪表盘项目进度为项目下全部部件的汇总示意，mock 直接沿用了部件口径
-const followedProgress: ProjectProgress[] = projects.map((p) => {
-  const stats = partStats[parts.find((part) => part.projectId === p.id)?.id ?? 10]
-  return { ...p, ...stats }
-})
+// 仪表盘项目进度为项目下各部件统计的汇总：条数类字段合计，百分比按部件数平均；每次请求实时合成以跟随部件增改
+function followedProgress(): ProjectProgress[] {
+  return projects.map((p) => {
+    const statsList = parts.filter((part) => part.projectId === p.id).map((part) => partStats[part.id] ?? emptyStats)
+    const sum = (pick: (s: ProgressStats) => number) => statsList.reduce((total, s) => total + pick(s), 0)
+    return {
+      ...p,
+      translatedPercent: statsList.length ? Math.round(sum((s) => s.translatedPercent) / statsList.length) : 0,
+      incompleteStrings: sum((s) => s.incompleteStrings),
+      incompleteWords: sum((s) => s.incompleteWords),
+      incompleteChars: sum((s) => s.incompleteChars),
+      untranslatedStrings: sum((s) => s.untranslatedStrings),
+      failingChecks: sum((s) => s.failingChecks),
+      suggestions: sum((s) => s.suggestions),
+      comments: sum((s) => s.comments),
+    }
+  })
+}
 
 // 各语言完成情况的示意百分比，简体中文用条目数据实时计算故不在此列出
 const partLanguagePercents: Record<number, Record<string, number>> = {
@@ -227,25 +240,32 @@ const partLanguagePercents: Record<number, Record<string, number>> = {
   30: { ja_jp: 40, ko_kr: 25 },
 }
 
-// 部件在单个语言下的完成情况：简体中文按条目与已存译文实测，其余语言取预设示意值
+// 部件在单个语言下的完成情况：简体中文按条目与已存译文实测，其余语言取预设示意值；无条目的部件没有进度可言，返回空
 function languageProgressForPart(partId: number): LanguageProgress[] {
   const list = entries[partId] ?? []
   const total = list.length
-  const percents: Record<string, number> = { en_us: 100, ...partLanguagePercents[partId] }
-  if (total > 0) {
-    const translated = list.filter((e) => (savedTargets[`${partId}|zh_cn|${e.key}`] ?? e.zhCn) !== '').length
-    percents.zh_cn = Math.round((translated / total) * 100)
-  }
-  return languages
-    .filter((lang) => (percents[lang.code] ?? 0) > 0)
-    .map((lang) => ({
-      code: lang.code,
-      name: lang.name,
-      translatedPercent: percents[lang.code],
-      untranslatedStrings: Math.round((total * (100 - percents[lang.code])) / 100),
+  if (total === 0) return []
+  const nameOf = (code: string) => languages.find((l) => l.code === code)?.name ?? code
+  const zhTranslated = list.filter((e) => (savedTargets[`${partId}|zh_cn|${e.key}`] ?? e.zhCn) !== '').length
+  // 简体中文的条数来自实测，百分比由条数推导；预设语言只有百分比示意值，未完成条数由百分比推导
+  const rows: LanguageProgress[] = [
+    { code: 'en_us', name: nameOf('en_us'), translatedPercent: 100, untranslatedStrings: 0, totalStrings: total },
+    {
+      code: 'zh_cn',
+      name: nameOf('zh_cn'),
+      translatedPercent: Math.round((zhTranslated / total) * 100),
+      untranslatedStrings: total - zhTranslated,
       totalStrings: total,
-    }))
-    .sort((a, b) => b.translatedPercent - a.translatedPercent || a.code.localeCompare(b.code))
+    },
+    ...Object.entries(partLanguagePercents[partId] ?? {}).map(([code, percent]) => ({
+      code,
+      name: nameOf(code),
+      translatedPercent: percent,
+      untranslatedStrings: Math.round((total * (100 - percent)) / 100),
+      totalStrings: total,
+    })),
+  ]
+  return rows.sort((a, b) => b.translatedPercent - a.translatedPercent || a.code.localeCompare(b.code))
 }
 
 const members: Record<number, ProjectMember[]> = {
@@ -557,7 +577,7 @@ async function route(
   }
   if (req.method === 'GET' && path === '/api/projects/followed/progress') {
     if (!requireAuth(req, res)) return
-    sendJson(res, 200, followedProgress)
+    sendJson(res, 200, followedProgress())
     return
   }
   if (req.method === 'GET' && path === '/api/projects') {
@@ -664,6 +684,10 @@ async function route(
   if (req.method === 'GET' && projectLanguagesMatch) {
     if (!requireAuth(req, res)) return
     const projectId = Number(projectLanguagesMatch[1])
+    if (!projects.some((p) => p.id === projectId)) {
+      sendJson(res, 404, { message: '项目不存在' })
+      return
+    }
     // 项目级完成情况为项目下各部件的汇总：百分比取平均，条数取合计
     const merged = new Map<string, { name: string; percentSum: number; partCount: number; untranslated: number; total: number }>()
     for (const part of parts.filter((p) => p.projectId === projectId)) {
@@ -815,12 +839,18 @@ async function route(
   const partLanguagesMatch = /^\/api\/parts\/(\d+)\/languages$/.exec(path)
   if (req.method === 'GET' && partLanguagesMatch) {
     if (!requireAuth(req, res)) return
-    sendJson(res, 200, languageProgressForPart(Number(partLanguagesMatch[1])))
+    const partId = Number(partLanguagesMatch[1])
+    if (!parts.some((p) => p.id === partId)) {
+      sendJson(res, 404, { message: '部件不存在' })
+      return
+    }
+    sendJson(res, 200, languageProgressForPart(partId))
     return
   }
 
   const entriesMatch = /^\/api\/parts\/(\d+)\/entries$/.exec(path)
-  if (req.method === 'GET' && entriesMatch) {    if (!requireAuth(req, res)) return
+  if (req.method === 'GET' && entriesMatch) {
+    if (!requireAuth(req, res)) return
     const partId = Number(entriesMatch[1])
     const lang = queryParam(req, 'lang')
     const list = entries[partId] ?? []
