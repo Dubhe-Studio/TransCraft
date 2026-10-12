@@ -125,7 +125,8 @@ function openEditGroup(group: SiteGroup) {
 
 // 返回是否允许关闭弹窗，校验失败或提交失败时保持弹窗打开
 async function submitGroup(): Promise<boolean> {
-  if (!groupForm.name) {
+  const name = groupForm.name.trim()
+  if (!name) {
     Message.error('用户组名称不能为空')
     return false
   }
@@ -133,8 +134,8 @@ async function submitGroup(): Promise<boolean> {
   try {
     const editing = groupEditing.value
     groupList.value = editing
-      ? await updateSiteGroup(editing.id, { ...groupForm })
-      : await createSiteGroup({ ...groupForm })
+      ? await updateSiteGroup(editing.id, { name, members: groupForm.members })
+      : await createSiteGroup({ name, members: groupForm.members })
     Message.success(editing ? '用户组已更新' : '用户组已创建')
     return true
   } catch (error) {

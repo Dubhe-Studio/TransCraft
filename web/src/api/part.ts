@@ -22,7 +22,8 @@ export function approveEntry(id: number, language: string, key: string): Promise
   return post<void>(`/parts/${id}/entries/${encodeURIComponent(key)}/approve?lang=${encodeURIComponent(language)}`)
 }
 
-// 建议与译文分开存放，第一阶段只负责提交，浏览与处理属后续规划
+// 建议与译文分开存放，提交后不改动译文本身
+// TODO: 建议的浏览与处理界面尚未实现，完成条件为有批准权限的成员能查看并采纳/驳回建议
 export function saveSuggestion(id: number, language: string, key: string, text: string): Promise<void> {
   return post<void>(`/parts/${id}/entries/${encodeURIComponent(key)}/suggestions?lang=${encodeURIComponent(language)}`, { text })
 }

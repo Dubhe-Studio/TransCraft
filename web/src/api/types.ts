@@ -119,7 +119,7 @@ export interface TranslationEntry {
   approved: boolean
 }
 
-// 项目级用户组，permissions 目前只有 'approve'（批准译文）
+// 项目级用户组，permissions 为权限标识列表，'approve' 表示批准译文
 export interface ProjectGroup {
   id: number
   projectId: number
@@ -134,7 +134,7 @@ export interface ProjectGroupInput {
   members: string[]
 }
 
-// 站点级用户组，第一阶段只做成员归组展示，不参与权限判定
+// 站点级用户组，只做成员归组展示，不参与权限判定
 export interface SiteGroup {
   id: number
   name: string

@@ -106,9 +106,9 @@ function selectEntry(entry: TranslationEntry) {
   })
 }
 
-// 从当前条目之后开始找第一个未翻译条目，找不到则绕回列表开头再找一遍
+// 从当前条目之后开始找第一个未翻译条目，找不到则绕回列表开头再找一遍；限定在当前筛选结果内，避免跳到被隐藏的条目
 function nextUntranslated(): TranslationEntry | null {
-  const list = sortedEntries.value
+  const list = filteredEntries.value
   const index = list.findIndex((e) => e.key === selectedKey.value)
   for (let offset = 1; offset < list.length; offset += 1) {
     const entry = list[(index + offset) % list.length]
@@ -141,6 +141,8 @@ async function persistDraft(): Promise<boolean> {
   try {
     await saveTranslation(partId, ui.currentLanguage, entry.key, text)
     entry.target = text
+    // 译文被修改后原批准结论不再成立
+    entry.approved = false
     return true
   } catch (error) {
     console.error('保存译文失败:', error)
@@ -159,6 +161,7 @@ async function saveAndStay() {
 
 async function saveAndNext() {
   if (await persistDraft()) {
+    Message.success('译文已保存')
     moveToNextUntranslated()
   }
 }
@@ -187,13 +190,13 @@ function openSuggest() {
 async function submitSuggestion(): Promise<boolean> {
   const entry = selected.value
   if (!entry) return false
-  if (!suggestText.value) {
+  if (!suggestText.value.trim()) {
     Message.error('建议内容不能为空')
     return false
   }
   suggesting.value = true
   try {
-    await saveSuggestion(partId, ui.currentLanguage, entry.key, suggestText.value)
+    await saveSuggestion(partId, ui.currentLanguage, entry.key, suggestText.value.trim())
     Message.success('建议已提交')
     return true
   } catch (error) {
@@ -259,7 +262,7 @@ async function submitSuggestion(): Promise<boolean> {
               批准
             </a-button>
             <a-button @click="openSuggest">建议</a-button>
-            <a-button @click="moveToNextUntranslated">跳过</a-button>
+            <a-button @click="confirmDiscardDraft(moveToNextUntranslated)">跳过</a-button>
           </div>
         </div>
         <a-empty v-else description="从下方列表选择一条要翻译的条目" />

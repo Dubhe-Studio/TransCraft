@@ -34,6 +34,11 @@ function changeSort(value: ProjectSort) {
 function openProject(project: ProjectSummary) {
   router.push({ name: 'project-detail', params: { id: project.id } })
 }
+
+// 后端时间为 UTC ISO 串，转成浏览器本地日期展示，避免直接截断字符串导致日期偏差
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString('zh-CN')
+}
 </script>
 
 <template>
@@ -68,7 +73,7 @@ function openProject(project: ProjectSummary) {
             </div>
             <div class="projects__meta">
               <span>创建者 {{ project.createdBy }}</span>
-              <span>{{ project.lastContributionAt ? `最后贡献 ${project.lastContributionAt.slice(0, 10)}` : '暂无贡献' }}</span>
+              <span>{{ project.lastContributionAt ? `最后贡献 ${formatDate(project.lastContributionAt)}` : '暂无贡献' }}</span>
             </div>
           </div>
         </a-list-item>

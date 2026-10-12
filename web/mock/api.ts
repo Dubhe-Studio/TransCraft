@@ -86,7 +86,7 @@ const projects: ProjectDetail[] = [
     namespace: 'create',
     description: '机械动力：传动与自动化的美学',
     createdBy: 'translator',
-    lastContributionAt: '2026-10-10T15:20:00+08:00',
+    lastContributionAt: '2026-10-10T07:20:00.000Z',
     repoUrl: 'https://github.com/Creators-of-Create/Create',
     branch: 'main',
     forkOwner: '',
@@ -102,7 +102,7 @@ const projects: ProjectDetail[] = [
     namespace: 'farmersdelight',
     description: '农夫乐事：更丰富的农耕与烹饪',
     createdBy: 'translator',
-    lastContributionAt: '2026-09-28T09:00:00+08:00',
+    lastContributionAt: '2026-09-28T01:00:00.000Z',
     repoUrl: 'https://github.com/vectorwing/FarmersDelight',
     branch: '1.20',
     forkOwner: '',
@@ -118,7 +118,7 @@ const projects: ProjectDetail[] = [
     namespace: 'ae2',
     description: '应用能源 2：数字化物品存储网络',
     createdBy: 'carol',
-    lastContributionAt: '2026-10-11T21:40:00+08:00',
+    lastContributionAt: '2026-10-11T13:40:00.000Z',
     repoUrl: 'https://github.com/AppliedEnergistics/Applied-Energistics-2',
     branch: 'main',
     forkOwner: 'translator',
@@ -287,7 +287,8 @@ const savedTargets: Record<string, string> = {}
 
 // 批准状态与建议计数同样按 部件|语言|键 存放
 const savedApproved: Record<string, boolean> = {}
-const suggestionCounts: Record<string, number> = {}
+// 建议按条目留存提交人、正文与时间，供后续浏览与处理界面读取
+const suggestionList: Record<string, { username: string; text: string; createdAt: string }[]> = {}
 
 // 项目 3 预置审校组并含当前演示用户，用于演示译者经用户组获得批准权限
 const projectGroupData: Record<number, ProjectGroup[]> = {
@@ -535,8 +536,12 @@ async function route(
     if (sort === 'creator') {
       list.sort((a, b) => a.createdBy.localeCompare(b.createdBy) || a.name.localeCompare(b.name))
     } else if (sort === 'activity') {
-      // 无贡献记录的项目排在最后
-      list.sort((a, b) => (b.lastContributionAt || '').localeCompare(a.lastContributionAt || ''))
+      // 时间一律为 UTC ISO 串，用 Date.parse 比较；无贡献记录的项目排在最后
+      list.sort((a, b) => {
+        if (!a.lastContributionAt) return 1
+        if (!b.lastContributionAt) return -1
+        return Date.parse(b.lastContributionAt) - Date.parse(a.lastContributionAt)
+      })
     } else {
       list.sort((a, b) => a.name.localeCompare(b.name))
     }
@@ -724,11 +729,12 @@ async function route(
     const partId = Number(entriesMatch[1])
     const lang = queryParam(req, 'lang')
     const list = entries[partId] ?? []
-    // 第一语言对照文本取用户主语言（演示用户为 zh_cn）的既有译文
+    // 第一语言对照文本取用户主语言的既有译文，缺省回退到该语言的初始数据
+    const primaryLang = sessionUser.primaryLanguage
     const result: TranslationEntry[] = list.map((entry) => ({
       key: entry.key,
       source: entry.source,
-      primary: savedTargets[`${partId}|zh_cn|${entry.key}`] ?? entry.zhCn,
+      primary: savedTargets[`${partId}|${primaryLang}|${entry.key}`] ?? (primaryLang === 'zh_cn' ? entry.zhCn : ''),
       target: savedTargets[`${partId}|${lang}|${entry.key}`] ?? (lang === 'zh_cn' ? entry.zhCn : ''),
       approved: savedApproved[`${partId}|${lang}|${entry.key}`] ?? false,
     }))
@@ -752,6 +758,8 @@ async function route(
       return
     }
     savedTargets[`${partId}|${lang}|${key}`] = body.text
+    // 译文被修改后原批准结论不再成立，重新进入待批准状态
+    delete savedApproved[`${partId}|${lang}|${key}`]
     // 保存译文视为一次贡献，刷新项目的最后贡献时间供活动排序演示
     const ownerPart = parts.find((p) => p.id === partId)
     const ownerProject = projects.find((p) => p.id === ownerPart?.projectId)
@@ -772,8 +780,18 @@ async function route(
     const partId = Number(approveMatch[1])
     const key = decodeURIComponent(approveMatch[2])
     const lang = queryParam(req, 'lang')
-    if (!(entries[partId] ?? []).some((entry) => entry.key === key)) {
+    const ownerPart = parts.find((p) => p.id === partId)
+    if (!ownerPart || !(entries[partId] ?? []).some((entry) => entry.key === key)) {
       sendJson(res, 404, { message: '条目不存在' })
+      return
+    }
+    // 与部件详情 canApprove 同一判定：所有者/维护者或含批准权限的用户组成员
+    const myRole = (members[ownerPart.projectId] ?? []).find((m) => m.username === sessionUser.username)?.role
+    const inApproveGroup = (projectGroupData[ownerPart.projectId] ?? []).some(
+      (g) => g.permissions.includes('approve') && g.members.includes(sessionUser.username),
+    )
+    if (myRole !== 'owner' && myRole !== 'maintainer' && !inApproveGroup) {
+      sendJson(res, 403, { message: '没有批准权限' })
       return
     }
     savedApproved[`${partId}|${lang}|${key}`] = true
@@ -796,8 +814,10 @@ async function route(
       sendJson(res, 404, { message: '条目不存在' })
       return
     }
-    const countKey = `${partId}|${lang}|${key}`
-    suggestionCounts[countKey] = (suggestionCounts[countKey] ?? 0) + 1
+    const storeKey = `${partId}|${lang}|${key}`
+    const stored = suggestionList[storeKey] ?? []
+    stored.push({ username: sessionUser.username, text: body.text, createdAt: new Date().toISOString() })
+    suggestionList[storeKey] = stored
     sendJson(res, 204, undefined)
     return
   }
@@ -850,7 +870,12 @@ async function route(
     if (!requireAuth(req, res)) return
     const projectId = Number(projectGroupMatch[1])
     const groupId = Number(projectGroupMatch[2])
-    projectGroupData[projectId] = (projectGroupData[projectId] ?? []).filter((g) => g.id !== groupId)
+    const list = projectGroupData[projectId] ?? []
+    if (!list.some((g) => g.id === groupId)) {
+      sendJson(res, 404, { message: '用户组不存在' })
+      return
+    }
+    projectGroupData[projectId] = list.filter((g) => g.id !== groupId)
     sendJson(res, 204, undefined)
     return
   }
@@ -952,9 +977,11 @@ async function route(
   if (req.method === 'DELETE' && siteGroupMatch) {
     if (!requireAdmin(req, res)) return
     const index = siteGroupData.findIndex((g) => g.id === Number(siteGroupMatch[1]))
-    if (index >= 0) {
-      siteGroupData.splice(index, 1)
+    if (index < 0) {
+      sendJson(res, 404, { message: '用户组不存在' })
+      return
     }
+    siteGroupData.splice(index, 1)
     sendJson(res, 204, undefined)
     return
   }

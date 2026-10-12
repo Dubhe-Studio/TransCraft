@@ -155,13 +155,14 @@ function openEditGroup(group: ProjectGroup) {
 
 // 返回是否允许关闭弹窗，校验失败或提交失败时保持弹窗打开
 async function submitGroup(): Promise<boolean> {
-  if (!groupForm.name) {
+  const name = groupForm.name.trim()
+  if (!name) {
     Message.error('用户组名称不能为空')
     return false
   }
   groupSubmitting.value = true
   const input = {
-    name: groupForm.name,
+    name,
     permissions: groupForm.approve ? ['approve'] : [],
     members: groupForm.members,
   }
