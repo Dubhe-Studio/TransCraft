@@ -18,7 +18,8 @@ TransCraft 是面向 Minecraft 模组社区的协作翻译管理平台。用户�
 | TypeScript | 6.0 | 严格模式，开启 `noUnusedLocals` / `noUnusedParameters` |
 | Vite | 8.3 | 构建工具，`mock/api.ts` 以插件形式挂到 dev server |
 | Arco Design Vue | 2.58 | 组件库，全量注册 `ArcoVue` 与 `ArcoVueIcon` |
-| Pinia | 4.0 | 状态管理，仅两个 store |
+| vue-i18n | 11.4 | 界面多语言，语言包在 `src/locale/`，机制见 `docs/i18n.md` |
+| Pinia | 4.0 | 状态管理：`auth`、`ui`，以及定义在 `src/i18n/index.ts` 的界面语言 `locale` |
 | Vue Router | 5.4 | `createWebHistory` 模式 |
 | sass-embedded | 1.105 | SCSS 编译，各组件用 `<style scoped lang="scss">` |
 
@@ -48,7 +49,7 @@ web/
 ├─ mock/api.ts             开发期 Mock 后端（1375 行，覆盖全部契约）
 ├─ public/                 favicon.svg、icons.svg
 └─ src/
-   ├─ main.ts              应用装配：Pinia → 主题初始化 → Router → Arco → 挂载
+   ├─ main.ts              应用装配：Pinia → 主题初始化 → Router → Arco → i18n → 挂载
    ├─ App.vue              仅一个 <router-view />
    ├─ router/
    │  ├─ index.ts          路由表、鉴权守卫、401 统一处理、标题设置
@@ -60,8 +61,10 @@ web/
    │  ├─ client.ts         fetch 封装：Bearer 头、JSON 编解码、ApiError 规范化
    │  ├─ types.ts          全部领域类型与接口出入参
    │  ├─ auth.ts user.ts project.ts part.ts group.ts admin.ts site.ts language.ts
+   ├─ i18n/index.ts        界面语言：vue-i18n 实例、语言表与 useLocaleStore
+   ├─ locale/              zh.json、en.json 语言包，index.ts 聚合并导出 LocaleCode
    ├─ layouts/MainLayout.vue  顶栏 + 内容区外壳
-   ├─ pages/               13 个页面组件
+   ├─ pages/               14 个页面组件
    ├─ components/          3 个复用组件
    ├─ styles/              index.scss（全局）、auth.scss（登录注册共用）
    ├─ slug.ts              地址标识的格式规则（前后端共用口径）
@@ -81,6 +84,7 @@ useUiStore().initTheme()   // 首帧渲染前应用主题，避免深浅色闪�
 app.use(router)
 app.use(ArcoVue)
 app.use(ArcoVueIcon)
+app.use(i18n)
 app.mount('#app')
 ```
 
@@ -418,7 +422,7 @@ const sortedEntries = computed(() => {
 
 `main.ts` 全量注册了 `ArcoVue` 与 `ArcoVueIcon`，没有按需引入。当前包体规模下问题不大，但 Arco 全量组件加全量图标对首屏体积有实际影响，是后续优化构建产物的第一个着手点。
 
-`i18n` 尚未引入，界面文案全部以中文字面量硬编码在各组件中，包括 `Message.error` 的提示语。若计划支持多语言界面，越早把文案抽出来成本越低。
+界面多语言的机制已经就位（vue-i18n 与 `src/locale/` 语言包，见 `docs/i18n.md`），但文案只迁移了顶栏、登录页、仪表盘与进度表，其余页面仍是中文字面量，包括 `Message.error` 的提示语，因此切到英文会出现中英混合。后续新增或改动页面时顺手把文案抽进语言包，并补齐 `zh` 与 `en` 两份。
 
 `stores/ui.ts` 的 `initTheme` 里注册的系统主题变化监听没有对应的移除逻辑。这在应用生命周期内不会造成泄漏（单次调用），但若将来需要在组件中重复调用该方法就需要处理。
 

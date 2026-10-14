@@ -53,7 +53,7 @@ function openProject(row: ProgressRow) {
       <a-typography-title :heading="5" style="margin: 0">{{ $t('dashboard.followed_projects') }}</a-typography-title>
       <a-button type="primary" @click="router.push({ name: 'project-new' })">
         <template #icon><icon-plus /></template>
-        {{ $t('menubar.add_project') }}
+        {{ $t('common.add_project') }}
       </a-button>
     </div>
 
@@ -64,12 +64,12 @@ function openProject(row: ProgressRow) {
         </template>
       </a-result>
 
-      <a-empty v-else-if="projects.length === 0" :description="$t('dashboard.followed_projects_empty')" />
+      <a-empty v-else-if="projects.length === 0" :description="$t('common.no_followed_projects')" />
 
       <ProgressTable
         v-else
         :rows="projects"
-        :name-label="$t('menubar.project')"
+        :name-label="$t('common.project')"
         @row-click="openProject"
       />
     </a-spin>

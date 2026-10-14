@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import { ApiError } from '../api/client'
 import { followedProjects } from '../api/project'
@@ -10,7 +11,6 @@ import type { LanguageInfo, ProjectSummary, SiteLinks } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 import { useLocaleStore } from '@/i18n'
-import { useI18n } from "vue-i18n";
 
 const { t } = useI18n()
 
@@ -71,7 +71,7 @@ const otherLanguages = computed(() => {
   return languages.value.filter((lang) => !used.has(lang.code))
 })
 const currentLanguageLabel = computed(() =>
-  ui.currentLanguage ? languageName(ui.currentLanguage) : '语言',
+  ui.currentLanguage ? languageName(ui.currentLanguage) : t('menubar.work_language'),
 )
 
 function chooseLanguage(code: string) {
@@ -121,10 +121,10 @@ onMounted(async () => {
           </router-link>
 
           <a-dropdown trigger="hover">
-            <span class="shell__nav-item">{{ $t('menubar.project') }} <icon-down /></span>
+            <span class="shell__nav-item">{{ $t('common.project') }} <icon-down /></span>
             <template #content>
               <a-doption v-if="followedFailed" @click="loadFollowed">{{ $t('menubar.load_failed_and_retry') }}</a-doption>
-              <a-doption v-else-if="followed.length === 0" disabled>{{ $t('menubar.no_followed_projects') }}</a-doption>
+              <a-doption v-else-if="followed.length === 0" disabled>{{ $t('common.no_followed_projects') }}</a-doption>
               <a-doption
                 v-for="project in followed"
                 :key="project.id"
@@ -199,7 +199,7 @@ onMounted(async () => {
         <a-dropdown trigger="hover">
           <span class="shell__nav-item"><icon-plus /> {{ $t('menubar.add') }}</span>
           <template #content>
-            <a-doption @click="router.push({ name: 'project-new' })">{{ $t('menubar.add_project') }}</a-doption>
+            <a-doption @click="router.push({ name: 'project-new' })">{{ $t('common.add_project') }}</a-doption>
             <a-doption @click="router.push({ name: 'component-new' })">{{ $t('menubar.add_component') }}</a-doption>
           </template>
         </a-dropdown>

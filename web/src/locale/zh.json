@@ -1,31 +1,35 @@
 {
+  "common": {
+    "project": "项目",
+    "add_project": "添加项目",
+    "no_followed_projects": "没有关注的项目"
+  },
+
   "login": {
     "login": "登录",
     "account": "账号",
-    "usernameOrEmail": "用户名或邮箱",
+    "username_or_email": "用户名或邮箱",
     "password": "密码",
     "no_account": "没有账号？",
     "sign_up": "立即注册",
-    "enter_account_password": "请输入账号或密码",
+    "enter_account_password": "请输入账号和密码",
     "failed": "登录失败，请稍后重试"
   },
 
   "menubar": {
     "dashboard": "首页",
-    "project": "项目",
-    "load_failed_and_retry": "加载失败，点击重试",
-    "no_followed_projects": "没有关注的项目",
     "all_projects": "所有项目",
     "primary_language": "首选语言",
     "secondary_language": "次要语言",
     "additional_languages": "其他语言",
     "loading_language_list": "加载语言列表中",
+    "load_failed_and_retry": "加载失败，点击重试",
+    "work_language": "语言",
     "management": "管理",
     "switch_light_theme": "切换到亮色主题",
     "switch_dark_theme": "切换到暗色主题",
     "switch_theme": "切换主题",
     "add": "添加",
-    "add_project": "添加项目",
     "add_component": "添加部件",
     "user_home": "用户主页",
     "settings": "设置",
@@ -41,7 +45,6 @@
 
   "dashboard": {
     "followed_projects": "关注的项目",
-    "followed_projects_empty": "没有关注的项目",
     "retry": "重试"
   },
 

@@ -3,8 +3,10 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { siteProjects, type ProjectSort } from '../api/project'
 import type { ProjectSummary } from '../api/types'
+import { useLocaleStore } from '@/i18n'
 
 const router = useRouter()
+const localeStore = useLocaleStore()
 
 const projects = ref<ProjectSummary[]>([])
 const sort = ref<ProjectSort>('name')
@@ -35,9 +37,10 @@ function openProject(project: ProjectSummary) {
   router.push({ name: 'project-detail', params: { slug: project.slug } })
 }
 
-// 后端时间为 UTC ISO 串，转成浏览器本地日期展示，避免直接截断字符串导致日期偏差
+// 后端时间为 UTC ISO 串，转成浏览器本地日期展示，避免直接截断字符串导致日期偏差；
+// 日期格式跟随界面语言，与界面文案保持一致
 function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString('zh-CN')
+  return new Date(value).toLocaleDateString(localeStore.current.bcp47)
 }
 </script>
 

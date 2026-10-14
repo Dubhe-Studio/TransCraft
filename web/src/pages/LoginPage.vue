@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import { redirectTarget } from '../router/redirect'
 import { useAuthStore } from '../stores/auth'
 import { useLocaleStore } from '@/i18n'
-import { useI18n } from "vue-i18n";
 
 const { t } = useI18n()
 
