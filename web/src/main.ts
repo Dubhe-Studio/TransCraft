@@ -6,6 +6,7 @@ import '@arco-design/web-vue/dist/arco.css'
 import '@/styles/index.scss'
 import App from './App.vue'
 import { router } from './router'
+import { i18n } from '@/i18n'
 import { useUiStore } from './stores/ui'
 
 const app = createApp(App)
@@ -15,4 +16,5 @@ useUiStore().initTheme()
 app.use(router)
 app.use(ArcoVue)
 app.use(ArcoVueIcon)
+app.use(i18n)
 app.mount('#app')

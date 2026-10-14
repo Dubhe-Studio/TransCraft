@@ -21,14 +21,14 @@ function formatNumber(value: number): string {
   <div class="progress-table">
     <div class="progress-table__row progress-table__row--head">
       <span class="progress-table__cell progress-table__cell--name">{{ nameLabel }}</span>
-      <span class="progress-table__cell">已翻译</span>
-      <span class="progress-table__cell">未完成</span>
-      <span class="progress-table__cell">未完成的词</span>
-      <span class="progress-table__cell">未完成的字符数</span>
-      <span class="progress-table__cell">未翻译</span>
-      <span class="progress-table__cell">检查</span>
-      <span class="progress-table__cell">建议</span>
-      <span class="progress-table__cell">评论</span>
+      <span class="progress-table__cell">{{ $t('table.translated') }}</span>
+      <span class="progress-table__cell">{{ $t('table.incompleted') }}</span>
+      <span class="progress-table__cell">{{ $t('table.incompleted_words') }}</span>
+      <span class="progress-table__cell">{{ $t('table.incompleted_char') }}</span>
+      <span class="progress-table__cell">{{ $t('table.untranslated') }}</span>
+      <span class="progress-table__cell">{{ $t('table.check') }}</span>
+      <span class="progress-table__cell">{{ $t('table.suggestions') }}</span>
+      <span class="progress-table__cell">{{ $t('table.comments') }}</span>
     </div>
 
     <div

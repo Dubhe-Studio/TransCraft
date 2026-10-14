@@ -1,0 +1,61 @@
+{
+  "common": {
+    "project": "项目",
+    "add_project": "添加项目",
+    "no_followed_projects": "没有关注的项目"
+  },
+
+  "login": {
+    "login": "登录",
+    "account": "账号",
+    "username_or_email": "用户名或邮箱",
+    "password": "密码",
+    "no_account": "没有账号？",
+    "sign_up": "立即注册",
+    "enter_account_password": "请输入账号和密码",
+    "failed": "登录失败，请稍后重试"
+  },
+
+  "menubar": {
+    "dashboard": "首页",
+    "all_projects": "所有项目",
+    "primary_language": "首选语言",
+    "secondary_language": "次要语言",
+    "additional_languages": "其他语言",
+    "loading_language_list": "加载语言列表中",
+    "load_failed_and_retry": "加载失败，点击重试",
+    "work_language": "语言",
+    "management": "管理",
+    "switch_light_theme": "切换到亮色主题",
+    "switch_dark_theme": "切换到暗色主题",
+    "switch_theme": "切换主题",
+    "add": "添加",
+    "add_component": "添加部件",
+    "user_home": "用户主页",
+    "settings": "设置",
+    "sign_out": "登出",
+    "more": "更多",
+    "contact_admin": "联系管理员",
+    "docs": "文档",
+    "contribute": "贡献",
+    "support": "支持",
+    "about": "关于",
+    "load_user_info_failed": "加载用户信息失败"
+  },
+
+  "dashboard": {
+    "followed_projects": "关注的项目",
+    "retry": "重试"
+  },
+
+  "table": {
+    "translated": "已翻译",
+    "incompleted": "未完成",
+    "incompleted_words": "未完成的词",
+    "incompleted_char": "未完成的字符数",
+    "untranslated": "未翻译",
+    "check": "检查",
+    "suggestions": "建议",
+    "comments": "评论"
+  }
+}
