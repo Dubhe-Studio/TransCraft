@@ -1,0 +1,6 @@
+{
+  "dashboard": "Dashboard",
+  "project": "Project",
+  "loadFailedAdnRetry": "Failed to load. Click to retry",
+  "noFollowedProjects": "No followed projects"
+}

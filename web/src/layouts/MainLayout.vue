@@ -9,11 +9,13 @@ import { siteLinks } from '../api/site'
 import type { LanguageInfo, ProjectSummary, SiteLinks } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
+import { useLocaleStore } from '@/i18n'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const ui = useUiStore()
+const localeStore = useLocaleStore()
 
 const followed = ref<ProjectSummary[]>([])
 const languages = ref<LanguageInfo[]>([])
@@ -112,14 +114,14 @@ onMounted(async () => {
             class="shell__nav-item"
             :class="{ 'shell__nav-item--active': route.name === 'dashboard' }"
           >
-            Dashboard
+            {{ $t('dashboard') }}
           </router-link>
 
           <a-dropdown trigger="hover">
-            <span class="shell__nav-item">项目 <icon-down /></span>
+            <span class="shell__nav-item">{{ $t('project') }} <icon-down /></span>
             <template #content>
-              <a-doption v-if="followedFailed" @click="loadFollowed">加载失败，点击重试</a-doption>
-              <a-doption v-else-if="followed.length === 0" disabled>暂无关注的项目</a-doption>
+              <a-doption v-if="followedFailed" @click="loadFollowed">{{ $t('loadFailedAdnRetry') }}</a-doption>
+              <a-doption v-else-if="followed.length === 0" disabled>{{ $t('noFollowedProjects') }}</a-doption>
               <a-doption
                 v-for="project in followed"
                 :key="project.id"
@@ -174,6 +176,22 @@ onMounted(async () => {
             </template>
           </a-button>
         </a-tooltip>
+
+        <a-dropdown trigger="hover">
+          <span class="shell__nav-item">
+            <icon-language /> {{ localeStore.current.label }} <icon-down />
+          </span>
+          <template #content>
+            <a-doption
+              v-for="item in localeStore.locales"
+              :key="item.code"
+              :disabled="item.code === localeStore.locale"
+              @click="localeStore.setLocale(item.code)"
+            >
+              {{ item.label }}
+            </a-doption>
+          </template>
+        </a-dropdown>
 
         <a-dropdown trigger="hover">
           <span class="shell__nav-item"><icon-plus /> 添加</span>
