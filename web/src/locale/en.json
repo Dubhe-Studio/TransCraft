@@ -1,6 +1,58 @@
 {
-  "dashboard": "Dashboard",
-  "project": "Project",
-  "loadFailedAdnRetry": "Failed to load. Click to retry",
-  "noFollowedProjects": "No followed projects"
+  "login": {
+    "login": "Login",
+    "account": "Account",
+    "username_or_email": "Username or Email",
+    "password": "Password",
+    "no_account": "Don't have an account?",
+    "sign_up": "Sign up now",
+    "enter_account_password": "Please enter your account and password",
+    "failed": "Login failed, Please try again later"
+  },
+
+  "menubar": {
+    "dashboard": "Dashboard",
+    "project": "Project",
+    "load_failed_and_retry": "Failed to load. Click to retry",
+    "no_followed_projects": "No followed projects",
+    "all_projects": "All Projects",
+    "primary_language": "Primary Language",
+    "secondary_language": "Secondary Language",
+    "additional_languages": "Additional Languages",
+    "loading_language_list": "Loading language list...",
+    "management": "Management",
+    "switch_light_theme": "Switch to Light Theme",
+    "switch_dark_theme": "Switch to Dark Theme",
+    "switch_theme": "Switch Theme",
+    "add": "Add",
+    "add_project": "Add Project",
+    "add_component": "Add Component",
+    "user_home": "User Home",
+    "settings": "Settings",
+    "sign_out": "Sign Out",
+    "more": "More",
+    "contact_admin": "Contract Admin",
+    "docs": "Documentation",
+    "contribute": "Contribute",
+    "support": "Support",
+    "about": "About",
+    "load_user_info_failed": "Failed to load user information"
+  },
+
+  "dashboard": {
+    "followed_projects": "Followed Projects",
+    "followed_projects_empty": "No Followed Projects",
+    "retry": "Retry"
+  },
+
+  "table": {
+    "translated": "Translated",
+    "incompleted": "Incompleted",
+    "incompleted_words": "Incompleted Words",
+    "incompleted_char": "Incompleted Characters",
+    "untranslated": "Untranslated",
+    "check": "Check",
+    "suggestions": "Suggestions",
+    "comments": "Comments"
+  }
 }

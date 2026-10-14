@@ -10,6 +10,9 @@ import type { LanguageInfo, ProjectSummary, SiteLinks } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 import { useLocaleStore } from '@/i18n'
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -92,7 +95,7 @@ onMounted(async () => {
       return
     }
     console.error('加载用户信息失败:', error)
-    Message.error('加载用户信息失败')
+    Message.error(t('menubar.load_user_info_failed'))
   }
 
   await Promise.all([loadFollowed(), loadLanguages(), loadSiteLinks()])
@@ -114,14 +117,14 @@ onMounted(async () => {
             class="shell__nav-item"
             :class="{ 'shell__nav-item--active': route.name === 'dashboard' }"
           >
-            {{ $t('dashboard') }}
+            {{ $t('menubar.dashboard') }}
           </router-link>
 
           <a-dropdown trigger="hover">
-            <span class="shell__nav-item">{{ $t('project') }} <icon-down /></span>
+            <span class="shell__nav-item">{{ $t('menubar.project') }} <icon-down /></span>
             <template #content>
-              <a-doption v-if="followedFailed" @click="loadFollowed">{{ $t('loadFailedAdnRetry') }}</a-doption>
-              <a-doption v-else-if="followed.length === 0" disabled>{{ $t('noFollowedProjects') }}</a-doption>
+              <a-doption v-if="followedFailed" @click="loadFollowed">{{ $t('menubar.load_failed_and_retry') }}</a-doption>
+              <a-doption v-else-if="followed.length === 0" disabled>{{ $t('menubar.no_followed_projects') }}</a-doption>
               <a-doption
                 v-for="project in followed"
                 :key="project.id"
@@ -130,19 +133,19 @@ onMounted(async () => {
                 {{ project.name }}
               </a-doption>
               <a-divider class="shell__dropdown-divider" />
-              <a-doption @click="router.push({ name: 'projects' })">全部项目</a-doption>
+              <a-doption @click="router.push({ name: 'projects' })">{{ $t('menubar.all_projects') }}</a-doption>
             </template>
           </a-dropdown>
 
           <a-dropdown trigger="hover">
             <span class="shell__nav-item">{{ currentLanguageLabel }} <icon-down /></span>
             <template #content>
-              <a-dgroup v-if="primaryLanguage" title="首要语言">
+              <a-dgroup v-if="primaryLanguage" :title="$t('menubar.primary_language')">
                 <a-doption @click="chooseLanguage(primaryLanguage)">
                   {{ languageName(primaryLanguage) }}
                 </a-doption>
               </a-dgroup>
-              <a-dgroup v-if="secondaryLanguages.length > 0" title="次要语言">
+              <a-dgroup v-if="secondaryLanguages.length > 0" :title="$t('menubar.secondary_language')">
                 <a-doption
                   v-for="code in secondaryLanguages"
                   :key="code"
@@ -151,14 +154,14 @@ onMounted(async () => {
                   {{ languageName(code) }}
                 </a-doption>
               </a-dgroup>
-              <a-dgroup v-if="otherLanguages.length > 0" title="其它语言">
+              <a-dgroup v-if="otherLanguages.length > 0" :title="$t('menubar.additional_languages')">
                 <a-doption v-for="lang in otherLanguages" :key="lang.code" @click="chooseLanguage(lang.code)">
                   {{ lang.name }}
                 </a-doption>
               </a-dgroup>
-              <a-doption v-if="languagesFailed" @click="loadLanguages">加载失败，点击重试</a-doption>
+              <a-doption v-if="languagesFailed" @click="loadLanguages">{{ $t('menubar.load_failed_and_retry') }}</a-doption>
               <a-doption v-else-if="languages.length === 0 && !primaryLanguage" disabled>
-                语言列表加载中
+                {{ $t('menubar.loading_language_list') }}
               </a-doption>
             </template>
           </a-dropdown>
@@ -166,10 +169,10 @@ onMounted(async () => {
       </div>
 
       <div class="shell__right">
-        <router-link v-if="auth.canManage" to="/admin" class="shell__nav-item">管理</router-link>
+        <router-link v-if="auth.canManage" to="/admin" class="shell__nav-item">{{ $t('menubar.management') }}</router-link>
 
-        <a-tooltip :content="ui.theme === 'dark' ? '切换为浅色模式' : '切换为深色模式'">
-          <a-button type="text" shape="circle" aria-label="切换深浅色模式" @click="ui.toggleTheme()">
+        <a-tooltip :content="ui.theme === 'dark' ? $t('menubar.switch_light_theme') : $t('menubar.switch_dark_theme')">
+          <a-button type="text" shape="circle" :aria-label="$t('menubar.switch_theme')" @click="ui.toggleTheme()">
             <template #icon>
               <icon-sun v-if="ui.theme === 'dark'" />
               <icon-moon v-else />
@@ -194,10 +197,10 @@ onMounted(async () => {
         </a-dropdown>
 
         <a-dropdown trigger="hover">
-          <span class="shell__nav-item"><icon-plus /> 添加</span>
+          <span class="shell__nav-item"><icon-plus /> {{ $t('menubar.add') }}</span>
           <template #content>
-            <a-doption @click="router.push({ name: 'project-new' })">添加项目</a-doption>
-            <a-doption @click="router.push({ name: 'component-new' })">添加部件</a-doption>
+            <a-doption @click="router.push({ name: 'project-new' })">{{ $t('menubar.add_project') }}</a-doption>
+            <a-doption @click="router.push({ name: 'component-new' })">{{ $t('menubar.add_component') }}</a-doption>
           </template>
         </a-dropdown>
 
@@ -211,21 +214,21 @@ onMounted(async () => {
               :disabled="!auth.user"
               @click="router.push({ name: 'user-home', params: { name: auth.user?.username } })"
             >
-              用户主页
+              {{ $t('menubar.user_home') }}
             </a-doption>
-            <a-doption @click="router.push({ name: 'settings' })">设置</a-doption>
-            <a-doption @click="logout">退出登录</a-doption>
+            <a-doption @click="router.push({ name: 'settings' })">{{ $t('menubar.settings') }}</a-doption>
+            <a-doption @click="logout">{{ $t('menubar.sign_out') }}</a-doption>
           </template>
         </a-dropdown>
 
         <a-dropdown trigger="hover">
-          <span class="shell__nav-item"><icon-more /> 更多</span>
+          <span class="shell__nav-item"><icon-more /> {{ $t('menubar.more') }}</span>
           <template #content>
-            <a-doption v-if="links.contact" @click="openLink(links.contact)">联系管理员</a-doption>
-            <a-doption v-if="links.docs" @click="openLink(links.docs)">文档</a-doption>
-            <a-doption v-if="links.contribute" @click="openLink(links.contribute)">贡献</a-doption>
-            <a-doption v-if="links.support" @click="openLink(links.support)">支持</a-doption>
-            <a-doption @click="router.push({ name: 'about' })">关于</a-doption>
+            <a-doption v-if="links.contact" @click="openLink(links.contact)">{{ $t('menubar.contact_admin') }}</a-doption>
+            <a-doption v-if="links.docs" @click="openLink(links.docs)">{{ $t('menubar.docs') }}</a-doption>
+            <a-doption v-if="links.contribute" @click="openLink(links.contribute)">{{ $t('menubar.contribute') }}</a-doption>
+            <a-doption v-if="links.support" @click="openLink(links.support)">{{ $t('menubar.support') }}</a-doption>
+            <a-doption @click="router.push({ name: 'about' })">{{ $t('menubar.about') }}</a-doption>
           </template>
         </a-dropdown>
       </div>

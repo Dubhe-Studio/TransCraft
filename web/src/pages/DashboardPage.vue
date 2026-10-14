@@ -50,26 +50,26 @@ function openProject(row: ProgressRow) {
 <template>
   <div class="dashboard">
     <div class="dashboard__header">
-      <a-typography-title :heading="5" style="margin: 0">关注的项目</a-typography-title>
+      <a-typography-title :heading="5" style="margin: 0">{{ $t('dashboard.followed_projects') }}</a-typography-title>
       <a-button type="primary" @click="router.push({ name: 'project-new' })">
         <template #icon><icon-plus /></template>
-        添加项目
+        {{ $t('menubar.add_project') }}
       </a-button>
     </div>
 
     <a-spin :loading="loading" class="dashboard__body">
       <a-result v-if="loadError" status="error" :title="loadError">
         <template #extra>
-          <a-button type="primary" @click="load">重试</a-button>
+          <a-button type="primary" @click="load">{{ $t('dashboard.retry') }}</a-button>
         </template>
       </a-result>
 
-      <a-empty v-else-if="projects.length === 0" description="还没有关注的项目" />
+      <a-empty v-else-if="projects.length === 0" :description="$t('dashboard.followed_projects_empty')" />
 
       <ProgressTable
         v-else
         :rows="projects"
-        name-label="项目"
+        :name-label="$t('menubar.project')"
         @row-click="openProject"
       />
     </a-spin>
