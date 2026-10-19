@@ -1,11 +1,14 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 // 部件配置编辑弹窗：项目页的部件列表与部件页共用，避免两份表单逻辑漂移
 // 打开方式为父级给 part 传入要编辑的部件，保存成功后以 saved 事件回传最新数据
 import { reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import { updatePart } from '../api/part'
-import { validSlug, SLUG_MESSAGE } from '../slug'
+import { validSlug } from '../slug'
 import type { Part, PartInput } from '../api/types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   part: Part | null
@@ -63,11 +66,11 @@ async function submit(): Promise<boolean> {
   const namespace = form.namespace.trim()
   const repoUrl = form.repoUrl.trim()
   if (!name || !namespace || !repoUrl) {
-    Message.error('部件名称、命名空间与仓库地址不能为空')
+    Message.error(t('part.required_fields'))
     return false
   }
   if (!validSlug(slug)) {
-    Message.error(`地址标识${SLUG_MESSAGE}`)
+    Message.error(t('slug.invalid'))
     return false
   }
   submitting.value = true
@@ -84,13 +87,13 @@ async function submit(): Promise<boolean> {
       fileMask: fileMaskSync.value ? '' : form.fileMask.trim(),
       templatePath: templatePathSync.value ? '' : form.templatePath.trim(),
     })
-    Message.success('部件配置已保存')
+    Message.success(t('part.saved'))
     emit('saved', saved)
     emit('closed')
     return true
   } catch (error) {
     console.error('保存部件配置失败:', error)
-    Message.error(error instanceof Error ? error.message : '保存失败')
+    Message.error(error instanceof Error ? error.message : t('part.save_failed'))
     return false
   } finally {
     submitting.value = false
@@ -106,41 +109,41 @@ function close() {
 <template>
   <a-modal
     v-model:visible="visible"
-    title="部件配置"
+    :title="$t('part.edit_title')"
     :ok-loading="submitting"
     :on-before-ok="submit"
     @cancel="close"
   >
     <a-form :model="form" layout="vertical">
-      <a-form-item label="部件名称" required>
+      <a-form-item :label="$t('part.name')" required>
         <a-input v-model="form.name" allow-clear />
       </a-form-item>
-      <a-form-item label="地址标识" required :extra="SLUG_MESSAGE">
+      <a-form-item :label="$t('slug.label')" required :extra="$t('slug.hint')">
         <a-input v-model="form.slug" allow-clear />
       </a-form-item>
-      <a-form-item label="命名空间" required>
+      <a-form-item :label="$t('part.namespace')" required>
         <a-input v-model="form.namespace" allow-clear />
       </a-form-item>
 
       <a-typography-title :heading="6" class="part-edit__group-title">VCS</a-typography-title>
-      <a-form-item label="仓库地址" required>
+      <a-form-item :label="$t('part.repo_url')" required>
         <a-input v-model="form.repoUrl" allow-clear />
       </a-form-item>
-      <a-form-item label="分支">
+      <a-form-item :label="$t('part.branch')">
         <a-input v-model="form.branch" placeholder="main" allow-clear />
       </a-form-item>
-      <a-form-item label="Fork 所有者" extra="留空表示直接向原仓库提交翻译">
+      <a-form-item :label="$t('part.fork_owner')" :extra="$t('part.fork_owner_hint')">
         <a-input v-model="form.forkOwner" allow-clear />
       </a-form-item>
-      <a-form-item label="Fork 分支">
+      <a-form-item :label="$t('part.fork_branch')">
         <a-input v-model="form.forkBranch" allow-clear />
       </a-form-item>
 
-      <a-typography-title :heading="6" class="part-edit__group-title">文件</a-typography-title>
-      <a-form-item label="语言文件掩码">
+      <a-typography-title :heading="6" class="part-edit__group-title">{{ $t('part.files') }}</a-typography-title>
+      <a-form-item :label="$t('part.file_mask')">
         <a-radio-group v-model="fileMaskSync" type="button" size="small">
-          <a-radio :value="true">从项目同步</a-radio>
-          <a-radio :value="false">部件自定义</a-radio>
+          <a-radio :value="true">{{ $t('part.sync_from_project') }}</a-radio>
+          <a-radio :value="false">{{ $t('part.custom') }}</a-radio>
         </a-radio-group>
         <a-input
           v-if="!fileMaskSync"
@@ -149,13 +152,13 @@ function close() {
           allow-clear
         />
         <a-typography-text v-else type="secondary" class="part-edit__sync-value">
-          {{ projectFileMask || '项目尚未配置' }}
+          {{ projectFileMask || $t('part.not_configured') }}
         </a-typography-text>
       </a-form-item>
-      <a-form-item label="翻译模板文件">
+      <a-form-item :label="$t('part.template_path')">
         <a-radio-group v-model="templatePathSync" type="button" size="small">
-          <a-radio :value="true">从项目同步</a-radio>
-          <a-radio :value="false">部件自定义</a-radio>
+          <a-radio :value="true">{{ $t('part.sync_from_project') }}</a-radio>
+          <a-radio :value="false">{{ $t('part.custom') }}</a-radio>
         </a-radio-group>
         <a-input
           v-if="!templatePathSync"
@@ -164,7 +167,7 @@ function close() {
           allow-clear
         />
         <a-typography-text v-else type="secondary" class="part-edit__sync-value">
-          {{ projectTemplatePath || '项目尚未配置' }}
+          {{ projectTemplatePath || $t('part.not_configured') }}
         </a-typography-text>
       </a-form-item>
     </a-form>

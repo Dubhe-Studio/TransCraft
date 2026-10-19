@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import { supportedLanguages } from '../api/language'
 import { changePassword, updateMe } from '../api/user'
 import type { LanguageInfo } from '../api/types'
 import { useAuthStore } from '../stores/auth'
+
+const { t } = useI18n()
 
 const auth = useAuthStore()
 
@@ -30,7 +33,7 @@ onMounted(async () => {
     languageList.value = await supportedLanguages()
   } catch (error) {
     console.error('加载语言列表失败:', error)
-    Message.error('加载语言列表失败，请刷新重试')
+    Message.error(t('common.load_languages_failed'))
   }
 })
 
@@ -53,10 +56,10 @@ async function saveProfile() {
   try {
     const updated = await updateMe({ ...profileForm })
     auth.applyLogin({ token: auth.token, user: updated })
-    Message.success('个人资料已保存')
+    Message.success(t('settings.profile_saved'))
   } catch (error) {
     console.error('保存个人资料失败:', error)
-    Message.error(error instanceof Error ? error.message : '保存失败')
+    Message.error(error instanceof Error ? error.message : t('settings.save_failed'))
   } finally {
     profileSaving.value = false
   }
@@ -64,19 +67,19 @@ async function saveProfile() {
 
 async function savePassword() {
   if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-    Message.error('两次输入的新密码不一致')
+    Message.error(t('settings.password_mismatch'))
     return
   }
   passwordSaving.value = true
   try {
     await changePassword(passwordForm.oldPassword, passwordForm.newPassword)
-    Message.success('密码已修改')
+    Message.success(t('settings.password_changed'))
     passwordForm.oldPassword = ''
     passwordForm.newPassword = ''
     passwordForm.confirmPassword = ''
   } catch (error) {
     console.error('修改密码失败:', error)
-    Message.error(error instanceof Error ? error.message : '修改失败')
+    Message.error(error instanceof Error ? error.message : t('settings.password_failed'))
   } finally {
     passwordSaving.value = false
   }
@@ -85,27 +88,27 @@ async function savePassword() {
 
 <template>
   <div class="settings">
-    <a-typography-title :heading="5">设置</a-typography-title>
+    <a-typography-title :heading="5">{{ $t('settings.title') }}</a-typography-title>
 
     <a-tabs default-active-key="profile">
-      <a-tab-pane key="profile" title="个人资料">
+      <a-tab-pane key="profile" :title="$t('settings.tab_profile')">
         <a-form :model="profileForm" layout="vertical" class="settings__form" @submit-success="saveProfile">
-          <a-form-item label="用户名">
+          <a-form-item :label="$t('settings.username')">
             <a-input :model-value="auth.user?.username ?? ''" disabled />
           </a-form-item>
-          <a-form-item field="displayName" label="显示名">
+          <a-form-item field="displayName" :label="$t('settings.display_name')">
             <a-input v-model="profileForm.displayName" allow-clear />
           </a-form-item>
-          <a-form-item field="avatarUrl" label="头像地址" extra="留空使用默认头像">
+          <a-form-item field="avatarUrl" :label="$t('settings.avatar_url')" :extra="$t('settings.avatar_hint')">
             <a-input v-model="profileForm.avatarUrl" placeholder="https://…" allow-clear />
           </a-form-item>
-          <a-form-item field="primaryLanguage" label="首要语言">
+          <a-form-item field="primaryLanguage" :label="$t('settings.primary_language')">
             <a-select
               v-model="profileForm.primaryLanguage"
               :options="languageList.map((l) => ({ label: l.name, value: l.code }))"
             />
           </a-form-item>
-          <a-form-item field="secondaryLanguages" label="次要语言" extra="次要语言用于参考对照，可多选">
+          <a-form-item field="secondaryLanguages" :label="$t('settings.secondary_languages')" :extra="$t('settings.secondary_hint')">
             <a-select
               v-model="profileForm.secondaryLanguages"
               multiple
@@ -113,24 +116,24 @@ async function savePassword() {
             />
           </a-form-item>
           <a-form-item>
-            <a-button type="primary" html-type="submit" :loading="profileSaving">保存资料</a-button>
+            <a-button type="primary" html-type="submit" :loading="profileSaving">{{ $t('settings.save_profile') }}</a-button>
           </a-form-item>
         </a-form>
       </a-tab-pane>
 
-      <a-tab-pane key="security" title="账号安全">
+      <a-tab-pane key="security" :title="$t('settings.tab_security')">
         <a-form :model="passwordForm" layout="vertical" class="settings__form" @submit-success="savePassword">
-          <a-form-item field="oldPassword" label="原密码" required :rules="[{ required: true, message: '原密码不能为空' }]">
+          <a-form-item field="oldPassword" :label="$t('settings.old_password')" required :rules="[{ required: true, message: $t('settings.old_password_required') }]">
             <a-input-password v-model="passwordForm.oldPassword" allow-clear />
           </a-form-item>
-          <a-form-item field="newPassword" label="新密码" required :rules="[{ required: true, message: '新密码不能为空' }]">
+          <a-form-item field="newPassword" :label="$t('settings.new_password')" required :rules="[{ required: true, message: $t('settings.new_password_required') }]">
             <a-input-password v-model="passwordForm.newPassword" allow-clear />
           </a-form-item>
-          <a-form-item field="confirmPassword" label="确认新密码" required :rules="[{ required: true, message: '请再次输入新密码' }]">
+          <a-form-item field="confirmPassword" :label="$t('settings.confirm_password')" required :rules="[{ required: true, message: $t('settings.confirm_password_required') }]">
             <a-input-password v-model="passwordForm.confirmPassword" allow-clear />
           </a-form-item>
           <a-form-item>
-            <a-button type="primary" html-type="submit" :loading="passwordSaving">修改密码</a-button>
+            <a-button type="primary" html-type="submit" :loading="passwordSaving">{{ $t('settings.change_password') }}</a-button>
           </a-form-item>
         </a-form>
       </a-tab-pane>

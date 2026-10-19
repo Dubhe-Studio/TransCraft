@@ -6,5 +6,3 @@ export const SLUG_MAX_LENGTH = 60
 export function validSlug(value: string): boolean {
   return value.length > 0 && value.length <= SLUG_MAX_LENGTH && SLUG_PATTERN.test(value)
 }
-
-export const SLUG_MESSAGE = '只能包含小写字母、数字、点与连字符，以字母或数字开头，最长 60 个字符'

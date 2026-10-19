@@ -2,6 +2,7 @@
 // 部件页：以 项目 slug + 部件 slug 寻址，列出各语言完成情况并管理部件级成员角色
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import { projectDetail } from '../api/project'
 import {
@@ -23,6 +24,8 @@ import type {
 import LanguageProgress from '../components/LanguageProgress.vue'
 import PartEditModal from '../components/PartEditModal.vue'
 
+const { t } = useI18n()
+
 const route = useRoute()
 const router = useRouter()
 
@@ -40,9 +43,8 @@ const loadError = ref('')
 // 项目所有者/维护者可配置部件成员与部件配置
 const canManage = computed(() => project.value?.role === 'owner' || project.value?.role === 'maintainer')
 
-const roleLabels: Record<PartRole, string> = {
-  maintainer: '维护者',
-  translator: '译者',
+function roleLabel(role: PartRole): string {
+  return t(`member.role.${role}`)
 }
 
 // 地址变化触发重取（路由组件复用）时旧请求不得覆盖新数据
@@ -69,7 +71,7 @@ async function load() {
   } catch (error) {
     if (seq !== loadSeq) return
     console.error('加载部件详情失败:', error)
-    loadError.value = error instanceof Error ? error.message : '加载失败'
+    loadError.value = error instanceof Error ? error.message : t('part_detail.load_failed')
   } finally {
     if (seq === loadSeq) {
       loading.value = false
@@ -123,19 +125,19 @@ const addSubmitting = ref(false)
 async function submitAddMember(): Promise<boolean> {
   if (!part.value) return false
   if (!addForm.username) {
-    Message.error('用户名不能为空')
+    Message.error(t('member.username_required'))
     return false
   }
   addSubmitting.value = true
   try {
     memberList.value = await addPartMember(part.value.id, { username: addForm.username, role: addForm.role })
-    Message.success('成员已添加')
+    Message.success(t('member.added'))
     addForm.username = ''
     addForm.role = 'translator'
     return true
   } catch (error) {
     console.error('添加部件成员失败:', error)
-    Message.error(error instanceof Error ? error.message : '添加失败')
+    Message.error(error instanceof Error ? error.message : t('member.add_failed'))
     return false
   } finally {
     addSubmitting.value = false
@@ -147,10 +149,10 @@ async function confirmRemove(member: PartMember) {
   try {
     await removePartMember(part.value.id, member.username)
     memberList.value = memberList.value.filter((m) => m.username !== member.username)
-    Message.success(`已移除 ${member.displayName}`)
+    Message.success(t('member.removed', { name: member.displayName }))
   } catch (error) {
     console.error('移除部件成员失败:', error)
-    Message.error(error instanceof Error ? error.message : '移除失败')
+    Message.error(error instanceof Error ? error.message : t('member.remove_failed'))
   }
 }
 </script>
@@ -160,7 +162,7 @@ async function confirmRemove(member: PartMember) {
     <a-spin :loading="loading" class="part-detail__spin">
       <a-result v-if="loadError" status="error" :title="loadError">
         <template #extra>
-          <a-button type="primary" @click="load">重试</a-button>
+          <a-button type="primary" @click="load">{{ $t('common.retry') }}</a-button>
         </template>
       </a-result>
 
@@ -182,39 +184,39 @@ async function confirmRemove(member: PartMember) {
             </a-typography-text>
           </div>
           <a-space>
-            <a-button v-if="canManage" @click="openEdit">编辑配置</a-button>
+            <a-button v-if="canManage" @click="openEdit">{{ $t('part_detail.edit_config') }}</a-button>
           </a-space>
         </div>
 
         <a-tabs default-active-key="languages">
-          <a-tab-pane key="languages" title="语言">
-            <a-empty v-if="languageRows.length === 0" description="该部件还没有语言文件" />
+          <a-tab-pane key="languages" :title="$t('part_detail.tab_languages')">
+            <a-empty v-if="languageRows.length === 0" :description="$t('part_detail.no_languages')" />
             <LanguageProgress v-else :rows="languageRows" link @row-click="openLanguage" />
           </a-tab-pane>
 
-          <a-tab-pane key="members" title="成员">
+          <a-tab-pane key="members" :title="$t('part_detail.tab_members')">
             <div v-if="canManage" class="part-detail__tab-actions">
               <a-button type="primary" @click="addVisible = true">
                 <template #icon><icon-plus /></template>
-                添加成员
+                {{ $t('member.add') }}
               </a-button>
             </div>
             <a-table :data="memberList" :pagination="false">
               <template #columns>
-                <a-table-column title="用户名" data-index="username" />
-                <a-table-column title="显示名" data-index="displayName" />
-                <a-table-column title="角色">
+                <a-table-column :title="$t('member.col_username')" data-index="username" />
+                <a-table-column :title="$t('member.col_display_name')" data-index="displayName" />
+                <a-table-column :title="$t('member.col_role')">
                   <template #cell="{ record }">
-                    {{ roleLabels[(record as PartMember).role] }}
+                    {{ roleLabel((record as PartMember).role) }}
                   </template>
                 </a-table-column>
-                <a-table-column v-if="canManage" title="操作" :width="120">
+                <a-table-column v-if="canManage" :title="$t('member.col_action')" :width="120">
                   <template #cell="{ record }">
                     <a-popconfirm
-                      content="确定移除该成员？"
+                      :content="$t('member.remove_confirm')"
                       @ok="confirmRemove(record as PartMember)"
                     >
-                      <a-button type="text" status="danger" size="small">移除</a-button>
+                      <a-button type="text" status="danger" size="small">{{ $t('member.remove') }}</a-button>
                     </a-popconfirm>
                   </template>
                 </a-table-column>
@@ -231,15 +233,15 @@ async function confirmRemove(member: PartMember) {
           @closed="onModalClosed"
         />
 
-        <a-modal v-model:visible="addVisible" title="添加部件成员" :ok-loading="addSubmitting" :on-before-ok="submitAddMember">
+        <a-modal v-model:visible="addVisible" :title="$t('member.add_part_title')" :ok-loading="addSubmitting" :on-before-ok="submitAddMember">
           <a-form :model="addForm" layout="vertical">
-            <a-form-item label="用户名" required>
-              <a-input v-model="addForm.username" placeholder="输入用户名" allow-clear />
+            <a-form-item :label="$t('member.col_username')" required>
+              <a-input v-model="addForm.username" :placeholder="$t('member.username_placeholder')" allow-clear />
             </a-form-item>
-            <a-form-item label="角色">
+            <a-form-item :label="$t('member.col_role')">
               <a-select v-model="addForm.role">
-                <a-option value="translator">译者</a-option>
-                <a-option value="maintainer">维护者</a-option>
+                <a-option value="translator">{{ $t('member.role.translator') }}</a-option>
+                <a-option value="maintainer">{{ $t('member.role.maintainer') }}</a-option>
               </a-select>
             </a-form-item>
           </a-form>

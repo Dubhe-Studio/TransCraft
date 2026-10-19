@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import { createPart } from '../api/part'
 import { followedProjects, projectDetail } from '../api/project'
-import { validSlug, SLUG_MESSAGE } from '../slug'
+import { validSlug } from '../slug'
 import type { PartInput, ProjectDetail, ProjectSummary } from '../api/types'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const route = useRoute()
@@ -53,7 +56,7 @@ watch(
       if (seq !== projectSeq) return
       selectedProject.value = null
       console.error('加载项目配置失败:', error)
-      Message.error('加载项目配置失败，请刷新重试')
+      Message.error(t('part_new.load_project_config_failed'))
     }
   },
 )
@@ -68,20 +71,20 @@ onMounted(async () => {
     }
   } catch (error) {
     console.error('加载项目列表失败:', error)
-    Message.error('加载项目列表失败，请刷新重试')
+    Message.error(t('part_new.load_project_list_failed'))
   }
 })
 
 async function submit() {
   const slug = form.slug.trim()
   if (!validSlug(slug)) {
-    Message.error(`地址标识${SLUG_MESSAGE}`)
+    Message.error(t('slug.invalid'))
     return
   }
   // 跳转部件页需要项目 slug，所属项目详情未就绪时不允许提交
   const project = selectedProject.value
   if (!project) {
-    Message.error('项目配置尚未加载完成，请稍后重试')
+    Message.error(t('part_new.project_config_not_ready'))
     return
   }
   submitting.value = true
@@ -98,14 +101,14 @@ async function submit() {
       fileMask: fileMaskSync.value ? '' : form.fileMask.trim(),
       templatePath: templatePathSync.value ? '' : form.templatePath.trim(),
     })
-    Message.success('部件创建成功')
+    Message.success(t('part_new.created'))
     router.push({
       name: 'part-detail',
       params: { slug: project.slug, partSlug: slug },
     })
   } catch (error) {
     console.error('创建部件失败:', error)
-    Message.error(error instanceof Error ? error.message : '创建失败')
+    Message.error(error instanceof Error ? error.message : t('part_new.create_failed'))
   } finally {
     submitting.value = false
   }
@@ -114,55 +117,55 @@ async function submit() {
 
 <template>
   <div class="component-new">
-    <a-typography-title :heading="5">添加部件</a-typography-title>
+    <a-typography-title :heading="5">{{ $t('part_new.title') }}</a-typography-title>
 
     <a-form :model="form" layout="vertical" class="component-new__form" @submit-success="submit">
-      <a-typography-title :heading="6" class="component-new__group-title">基本信息</a-typography-title>
+      <a-typography-title :heading="6" class="component-new__group-title">{{ $t('part_new.basic') }}</a-typography-title>
       <a-form-item
         field="projectId"
-        label="所属项目"
+        :label="$t('part_new.project')"
         required
         :rules="[
-          { required: true, message: '请选择所属项目' },
+          { required: true, message: $t('part_new.project_required') },
           // projectId 初值为 0，required 对数字 0 视为已填，需另行拦截未选择的情形
-          { validator: (value, fail) => { if (!value) fail('请选择所属项目') } },
+          { validator: (value, fail) => { if (!value) fail($t('part_new.project_required')) } },
         ]"
       >
         <a-select
           v-model="form.projectId"
-          placeholder="选择项目"
+          :placeholder="$t('part_new.project_placeholder')"
           :options="projects.map((p) => ({ label: p.name, value: p.id }))"
         />
       </a-form-item>
-      <a-form-item field="name" label="部件名称" required :rules="[{ required: true, message: '部件名称不能为空' }]">
-        <a-input v-model="form.name" placeholder="例如 Create 本体" allow-clear />
+      <a-form-item field="name" :label="$t('part.name')" required :rules="[{ required: true, message: $t('part.name_required') }]">
+        <a-input v-model="form.name" :placeholder="$t('part_new.name_placeholder')" allow-clear />
       </a-form-item>
-      <a-form-item field="slug" label="地址标识" required :extra="SLUG_MESSAGE">
-        <a-input v-model="form.slug" placeholder="例如 dev-1.21.1" allow-clear />
+      <a-form-item field="slug" :label="$t('slug.label')" required :extra="$t('slug.hint')">
+        <a-input v-model="form.slug" :placeholder="$t('part_new.slug_placeholder')" allow-clear />
       </a-form-item>
-      <a-form-item field="namespace" label="命名空间" required :rules="[{ required: true, message: '命名空间不能为空' }]">
-        <a-input v-model="form.namespace" placeholder="例如 create" allow-clear />
+      <a-form-item field="namespace" :label="$t('part.namespace')" required :rules="[{ required: true, message: $t('part.namespace_required') }]">
+        <a-input v-model="form.namespace" :placeholder="$t('part_new.namespace_placeholder')" allow-clear />
       </a-form-item>
 
       <a-typography-title :heading="6" class="component-new__group-title">VCS</a-typography-title>
-      <a-form-item field="repoUrl" label="仓库地址" required :rules="[{ required: true, message: '仓库地址不能为空' }]">
+      <a-form-item field="repoUrl" :label="$t('part.repo_url')" required :rules="[{ required: true, message: $t('part.repo_url_required') }]">
         <a-input v-model="form.repoUrl" placeholder="https://github.com/owner/repo" allow-clear />
       </a-form-item>
-      <a-form-item field="branch" label="分支">
+      <a-form-item field="branch" :label="$t('part.branch')">
         <a-input v-model="form.branch" placeholder="main" allow-clear />
       </a-form-item>
-      <a-form-item field="forkOwner" label="Fork 所有者" extra="留空表示直接向原仓库提交翻译">
+      <a-form-item field="forkOwner" :label="$t('part.fork_owner')" :extra="$t('part.fork_owner_hint')">
         <a-input v-model="form.forkOwner" allow-clear />
       </a-form-item>
-      <a-form-item field="forkBranch" label="Fork 分支">
+      <a-form-item field="forkBranch" :label="$t('part.fork_branch')">
         <a-input v-model="form.forkBranch" allow-clear />
       </a-form-item>
 
-      <a-typography-title :heading="6" class="component-new__group-title">文件</a-typography-title>
-      <a-form-item field="fileMask" label="语言文件掩码" extra="从项目同步时使用项目的当前配置">
+      <a-typography-title :heading="6" class="component-new__group-title">{{ $t('part.files') }}</a-typography-title>
+      <a-form-item field="fileMask" :label="$t('part.file_mask')" :extra="$t('part_new.file_mask_hint')">
         <a-radio-group v-model="fileMaskSync" type="button" size="small">
-          <a-radio :value="true">从项目同步</a-radio>
-          <a-radio :value="false">部件自定义</a-radio>
+          <a-radio :value="true">{{ $t('part.sync_from_project') }}</a-radio>
+          <a-radio :value="false">{{ $t('part.custom') }}</a-radio>
         </a-radio-group>
         <a-input
           v-if="!fileMaskSync"
@@ -172,13 +175,13 @@ async function submit() {
           allow-clear
         />
         <a-typography-text v-else type="secondary" class="component-new__sync-value">
-          {{ syncFileMask || '项目尚未配置' }}
+          {{ syncFileMask || $t('part.not_configured') }}
         </a-typography-text>
       </a-form-item>
-      <a-form-item field="templatePath" label="翻译模板文件" extra="生成新语言文件时使用的模板路径">
+      <a-form-item field="templatePath" :label="$t('part.template_path')" :extra="$t('part_new.template_path_hint')">
         <a-radio-group v-model="templatePathSync" type="button" size="small">
-          <a-radio :value="true">从项目同步</a-radio>
-          <a-radio :value="false">部件自定义</a-radio>
+          <a-radio :value="true">{{ $t('part.sync_from_project') }}</a-radio>
+          <a-radio :value="false">{{ $t('part.custom') }}</a-radio>
         </a-radio-group>
         <a-input
           v-if="!templatePathSync"
@@ -188,14 +191,14 @@ async function submit() {
           allow-clear
         />
         <a-typography-text v-else type="secondary" class="component-new__sync-value">
-          {{ syncTemplatePath || '项目尚未配置' }}
+          {{ syncTemplatePath || $t('part.not_configured') }}
         </a-typography-text>
       </a-form-item>
 
       <a-form-item>
         <a-space>
-          <a-button type="primary" html-type="submit" :loading="submitting">创建部件</a-button>
-          <a-button @click="router.push({ name: 'dashboard' })">取消</a-button>
+          <a-button type="primary" html-type="submit" :loading="submitting">{{ $t('part_new.create') }}</a-button>
+          <a-button @click="router.push({ name: 'dashboard' })">{{ $t('common.cancel') }}</a-button>
         </a-space>
       </a-form-item>
     </a-form>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Message, Modal } from '@arco-design/web-vue'
 import {
   approveEntry,
@@ -15,6 +16,8 @@ import type { LanguageProgress as LanguageProgressRow, PartDetail, TranslationEn
 import LanguageProgress from '../components/LanguageProgress.vue'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -106,7 +109,7 @@ async function load() {
   } catch (error) {
     if (seq !== loadSeq) return
     console.error('加载翻译条目失败:', error)
-    loadError.value = error instanceof Error ? error.message : '加载失败'
+    loadError.value = error instanceof Error ? error.message : t('part_translate.load_failed')
   } finally {
     if (seq === loadSeq) {
       loading.value = false
@@ -118,8 +121,8 @@ async function load() {
 function confirmDiscardDraft(next: () => void) {
   if (selected.value && draft.value !== selected.value.target) {
     Modal.confirm({
-      title: '未保存的修改',
-      content: '当前译文尚未保存，切换后将丢失。确定继续吗？',
+      title: t('part_translate.unsaved_title'),
+      content: t('part_translate.unsaved_content'),
       onOk: next,
     })
     return
@@ -196,7 +199,7 @@ function moveToNextUntranslated() {
   if (next) {
     moveTo(next)
   } else {
-    Message.info('没有更多未翻译条目了')
+    Message.info(t('part_translate.no_more_untranslated'))
   }
 }
 
@@ -217,7 +220,7 @@ async function persistDraft(): Promise<boolean> {
     return true
   } catch (error) {
     console.error('保存译文失败:', error)
-    Message.error(error instanceof Error ? error.message : '保存失败')
+    Message.error(error instanceof Error ? error.message : t('part_translate.save_failed'))
     return false
   } finally {
     saving.value = false
@@ -226,13 +229,13 @@ async function persistDraft(): Promise<boolean> {
 
 async function saveAndStay() {
   if (await persistDraft()) {
-    Message.success('译文已保存')
+    Message.success(t('part_translate.saved'))
   }
 }
 
 async function saveAndNext() {
   if (await persistDraft()) {
-    Message.success('译文已保存')
+    Message.success(t('part_translate.saved'))
     moveToNextUntranslated()
   }
 }
@@ -244,10 +247,10 @@ async function approve() {
   try {
     await approveEntry(partId.value, language.value, entry.key)
     entry.approved = true
-    Message.success('已批准')
+    Message.success(t('part_translate.approved'))
   } catch (error) {
     console.error('批准译文失败:', error)
-    Message.error(error instanceof Error ? error.message : '批准失败')
+    Message.error(error instanceof Error ? error.message : t('part_translate.approve_failed'))
   } finally {
     approving.value = false
   }
@@ -262,17 +265,17 @@ async function submitSuggestion(): Promise<boolean> {
   const entry = selected.value
   if (!entry) return false
   if (!suggestText.value.trim()) {
-    Message.error('建议内容不能为空')
+    Message.error(t('part_translate.suggestion_required'))
     return false
   }
   suggesting.value = true
   try {
     await saveSuggestion(partId.value, language.value, entry.key, suggestText.value.trim())
-    Message.success('建议已提交')
+    Message.success(t('part_translate.suggestion_submitted'))
     return true
   } catch (error) {
     console.error('提交建议失败:', error)
-    Message.error(error instanceof Error ? error.message : '提交失败')
+    Message.error(error instanceof Error ? error.message : t('part_translate.submit_failed'))
     return false
   } finally {
     suggesting.value = false
@@ -285,7 +288,7 @@ async function submitSuggestion(): Promise<boolean> {
     <a-spin :loading="loading" class="translate__spin">
       <a-result v-if="loadError" status="error" :title="loadError">
         <template #extra>
-          <a-button type="primary" @click="load">重试</a-button>
+          <a-button type="primary" @click="load">{{ $t('common.retry') }}</a-button>
         </template>
       </a-result>
 
@@ -315,8 +318,8 @@ async function submitSuggestion(): Promise<boolean> {
                 </div>
               </a-option>
             </a-select>
-            <a-popover title="各语言完成情况" position="br" :content-style="{ width: '360px' }">
-              <a-button>完成情况</a-button>
+            <a-popover :title="$t('part_translate.progress_by_language')" position="br" :content-style="{ width: '360px' }">
+              <a-button>{{ $t('part_translate.progress') }}</a-button>
               <template #content>
                 <LanguageProgress :rows="languageRows" />
               </template>
@@ -327,29 +330,29 @@ async function submitSuggestion(): Promise<boolean> {
         <div v-if="selected" class="translate__panel">
           <div class="translate__key-row">
             <a-typography-text class="translate__key" code>{{ selected.key }}</a-typography-text>
-            <a-tag v-if="selected.approved" color="green" size="small">已批准</a-tag>
+            <a-tag v-if="selected.approved" color="green" size="small">{{ $t('part_translate.approved') }}</a-tag>
           </div>
           <div class="translate__field">
-            <div class="translate__field-label">模板语言（{{ part.referenceLanguage }}）</div>
+            <div class="translate__field-label">{{ $t('part_translate.field_template', { lang: part.referenceLanguage }) }}</div>
             <div class="translate__block">{{ selected.source }}</div>
           </div>
           <div class="translate__field">
-            <div class="translate__field-label">第一语言（{{ primaryLanguage }}）</div>
+            <div class="translate__field-label">{{ $t('part_translate.field_primary', { lang: primaryLanguage }) }}</div>
             <div class="translate__block" :class="{ 'translate__block--empty': !selected.primary }">
-              {{ selected.primary || '暂无第一语言译文' }}
+              {{ selected.primary || $t('part_translate.no_primary') }}
             </div>
           </div>
           <div class="translate__field">
-            <div class="translate__field-label">当前译文（{{ language }}）</div>
+            <div class="translate__field-label">{{ $t('part_translate.field_current', { lang: language }) }}</div>
             <a-textarea
               v-model="draft"
               :auto-size="{ minRows: 3 }"
-              placeholder="输入译文"
+              :placeholder="$t('part_translate.draft_placeholder')"
             />
           </div>
           <div class="translate__actions">
-            <a-button type="primary" :loading="saving" @click="saveAndNext">保存并继续</a-button>
-            <a-button :loading="saving" @click="saveAndStay">保存并停留</a-button>
+            <a-button type="primary" :loading="saving" @click="saveAndNext">{{ $t('part_translate.save_and_next') }}</a-button>
+            <a-button :loading="saving" @click="saveAndStay">{{ $t('part_translate.save_and_stay') }}</a-button>
             <a-button
               v-if="part.canApprove"
               status="success"
@@ -357,25 +360,25 @@ async function submitSuggestion(): Promise<boolean> {
               :disabled="selected.approved"
               @click="approve"
             >
-              批准
+              {{ $t('part_translate.approve') }}
             </a-button>
-            <a-button @click="openSuggest">建议</a-button>
-            <a-button @click="confirmDiscardDraft(moveToNextUntranslated)">跳过</a-button>
+            <a-button @click="openSuggest">{{ $t('part_translate.suggest') }}</a-button>
+            <a-button @click="confirmDiscardDraft(moveToNextUntranslated)">{{ $t('part_translate.skip') }}</a-button>
           </div>
         </div>
-        <a-empty v-else description="从下方列表选择一条要翻译的条目" />
+        <a-empty v-else :description="$t('part_translate.select_entry_hint')" />
 
         <div class="translate__list">
           <div class="translate__toolbar">
             <a-radio-group v-model="filterMode" type="button" size="small">
-              <a-radio value="all">全部</a-radio>
-              <a-radio value="untranslated">未翻译</a-radio>
-              <a-radio value="translated">已翻译</a-radio>
+              <a-radio value="all">{{ $t('part_translate.filter_all') }}</a-radio>
+              <a-radio value="untranslated">{{ $t('part_translate.filter_untranslated') }}</a-radio>
+              <a-radio value="translated">{{ $t('part_translate.filter_translated') }}</a-radio>
             </a-radio-group>
-            <a-input-search v-model="keyword" size="small" placeholder="搜索键名或内容" allow-clear />
+            <a-input-search v-model="keyword" size="small" :placeholder="$t('part_translate.search_placeholder')" allow-clear />
           </div>
 
-          <a-empty v-if="filteredEntries.length === 0" description="没有符合条件的条目" />
+          <a-empty v-if="filteredEntries.length === 0" :description="$t('part_translate.no_matching_entries')" />
           <a-scrollbar v-else class="translate__scroll">
             <div
               v-for="entry in filteredEntries"
@@ -396,14 +399,14 @@ async function submitSuggestion(): Promise<boolean> {
 
     <a-modal
       v-model:visible="suggestVisible"
-      title="提交建议"
+      :title="$t('part_translate.suggest_title')"
       :ok-loading="suggesting"
       :on-before-ok="submitSuggestion"
     >
       <a-typography-text type="secondary">
-        建议不会直接成为译文，交由有批准权限的成员处理。
+        {{ $t('part_translate.suggest_hint') }}
       </a-typography-text>
-      <a-textarea v-model="suggestText" :auto-size="{ minRows: 3 }" placeholder="输入建议内容" />
+      <a-textarea v-model="suggestText" :auto-size="{ minRows: 3 }" :placeholder="$t('part_translate.suggest_placeholder')" />
     </a-modal>
   </div>
 </template>
