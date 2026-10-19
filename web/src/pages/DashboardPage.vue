@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { followedProgress } from '../api/project'
 import type { ProgressRow, ProjectProgress } from '../api/types'
 import ProgressTable from '../components/ProgressTable.vue'
 import { useUiStore } from '../stores/ui'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const ui = useUiStore()
@@ -26,7 +29,7 @@ async function load() {
   } catch (error) {
     if (seq !== loadSeq) return
     console.error('加载关注的项目失败:', error)
-    loadError.value = error instanceof Error ? error.message : '加载失败'
+    loadError.value = error instanceof Error ? error.message : t('dashboard.load_failed')
   } finally {
     if (seq === loadSeq) {
       loading.value = false
@@ -60,7 +63,7 @@ function openProject(row: ProgressRow) {
     <a-spin :loading="loading" class="dashboard__body">
       <a-result v-if="loadError" status="error" :title="loadError">
         <template #extra>
-          <a-button type="primary" @click="load">{{ $t('dashboard.retry') }}</a-button>
+          <a-button type="primary" @click="load">{{ $t('common.retry') }}</a-button>
         </template>
       </a-result>
 

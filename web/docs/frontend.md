@@ -49,7 +49,7 @@ web/
 ├─ mock/api.ts             开发期 Mock 后端（1375 行，覆盖全部契约）
 ├─ public/                 favicon.svg、icons.svg
 └─ src/
-   ├─ main.ts              应用装配：Pinia → 主题初始化 → Router → Arco → i18n → 挂载
+   ├─ main.ts              应用装配：Pinia（含持久化插件）→ 恢复界面语言与主题 → Router → Arco → i18n → 挂载
    ├─ App.vue              仅一个 <router-view />
    ├─ router/
    │  ├─ index.ts          路由表、鉴权守卫、401 统一处理、标题设置
@@ -65,9 +65,10 @@ web/
    ├─ locale/              zh.json、en.json 语言包，index.ts 聚合并导出 LocaleCode
    ├─ layouts/MainLayout.vue  顶栏 + 内容区外壳
    ├─ pages/               14 个页面组件
-   ├─ components/          3 个复用组件
+   ├─ components/          4 个复用组件
    ├─ styles/              index.scss（全局）、auth.scss（登录注册共用）
-   ├─ slug.ts              地址标识的格式规则（前后端共用口径）
+   ├─ slug.ts              地址标识的格式规则（前后端共用口径），提示文案在语言包的 slug 分组
+   ├─ format.ts            日期与数字按界面语言格式化的共用函数
    └─ langSegment.ts       语言代码与地址段的互转
 ```
 
@@ -79,8 +80,11 @@ web/
 
 ```ts
 const app = createApp(App)
-app.use(createPinia())
-useUiStore().initTheme()   // 首帧渲染前应用主题，避免深浅色闪烁
+const pinia = createPinia()
+pinia.use(createPersistedState({ debug: true }))
+app.use(pinia)
+useLocaleStore().initLocale()   // 恢复界面语言并应用：写 html lang 与 Arco 文案
+useUiStore().initTheme()        // 恢复主题并应用，避免深浅色闪烁
 app.use(router)
 app.use(ArcoVue)
 app.use(ArcoVueIcon)
@@ -88,7 +92,11 @@ app.use(i18n)
 app.mount('#app')
 ```
 
-`initTheme` 必须在 `mount` 之前执行，否则会先渲染浅色再切深色。它一次完成三件事：读取本地主题记录；本地没有记录时跟随 `prefers-color-scheme`；注册系统主题变化监听，但用户手动选择过主题后该监听不再生效。
+持久化插件必须在创建 store 之前注册，并且要先 `app.use(pinia)` 让插件真正挂到 pinia 实例上，之后创建的 store 才会从本地恢复状态。因此两个初始化调用都放在 `mount` 之前：它们触发 store 创建，再由 `initLocale` / `initTheme` 把恢复出来的偏好应用到 DOM，第一帧不会再闪一次浅色或默认语言。插件的 `debug` 打开后，本地记录损坏、配额不足这类读写失败会打到控制台，而不是被静默吞掉。
+
+`initLocale` 不依赖插件的水合钩子：反序列化失败时 `persist.afterHydrate` 不会执行，界面语言就会只剩 vue-i18n 生效，`html lang` 与 Arco 文案停在旧值，因此界面语言改为在 store 创建后无条件校验并应用一次。
+
+`initTheme` 读取恢复出来的主题选择：用户手动选过主题时固定用该选择；没选过时跟随 `prefers-color-scheme`，并注册系统监听，此时系统切换深浅色会即时生效。
 
 ## 五、路由与寻址
 
@@ -112,7 +120,7 @@ app.mount('#app')
 | `/about` | about | 关于 |
 | `/:pathMatch(.*)*` | — | 兜底重定向到 `/` |
 
-除登录与注册外，全部路由挂在 `MainLayout` 之下，父路由带 `meta.requiresAuth`。`RouteMeta` 通过 `declare module 'vue-router'` 扩展了 `guest`、`requiresAuth`、`requiresAdmin`、`title` 四个字段。
+除登录与注册外，全部路由挂在 `MainLayout` 之下，父路由带 `meta.requiresAuth`。`RouteMeta` 通过 `declare module 'vue-router'` 扩展了 `guest`、`requiresAuth`、`requiresAdmin`、`titleKey` 四个字段。`titleKey` 存的是标签页标题在语言包 `route` 分组里的键，不是文案本身。
 
 ### 三级地址寻址
 
@@ -145,7 +153,7 @@ fromLangSegment('zh-CN')    // 'zh_cn'
 
 `setUnauthorizedHandler` 注册的回调在任意接口返回 401 时触发，统一登出并带着当前地址跳回登录页。这里有一个刻意的例外：当前路由带 `meta.guest` 时（即已经在登录页或注册页）不跳转，因为此时 401 表示账号密码错误一类的业务反馈，应该在原页面用消息提示。
 
-`afterEach` 设置 `document.title`，格式为 `页面标题 · TransCraft`，没有标题时回退为 `TransCraft`。
+`afterEach` 按当前路由的 `meta.titleKey` 设置 `document.title`，格式为 `页面标题 · TransCraft`，没有标题时回退为 `TransCraft`。标题文案与界面文案同源，因此额外用 `watch(i18n.global.locale)` 监听界面语言：切换语言不会触发导航，只靠 `afterEach` 的话标题会停在旧语言，语言变化时需要用当前路由的 `titleKey` 再渲染一次。
 
 ### 组件重挂载策略
 
@@ -155,14 +163,20 @@ fromLangSegment('zh-CN')    // 'zh_cn'
 
 ## 六、状态管理
 
-只有两个 store，都使用 setup 语法。
+`stores/` 下只有两个 store，都使用 setup 语法。持久化统一交给 `pinia-plugin-persistedstate`：`main.ts` 里 `pinia.use(createPersistedState({ debug: true }))` 注册插件，各 store 在 `defineStore` 的第三个参数里声明 `persist`，不再自己读写 `localStorage`。每个 store 一个键，内容是 JSON；用 `pick` 只挑需要跨页面保留的字段，其余状态（如用户信息、系统主题偏好）不落本地。
 
-`stores/auth.ts` 管理 `token` 与 `user`。令牌的权威来源是 `localStorage` 的 `transcraft_token`，store 初始化时直接从本地读取，刷新页面后令牌仍在但 `user` 为空，因此需要 `fetchMe()` 重新拉取（路由守卫与管理页会触发，`MainLayout` 挂载时也会调用）。`fetchMe` 有短路逻辑：没有令牌或已有用户时直接返回，避免重复请求。`canManage` 计算属性只认 `admin` 与 `owner` 两个站点角色，决定顶栏「管理」入口是否显示。
+`stores/auth.ts` 管理 `token` 与 `user`。`token` 通过 `persist.pick` 写入 `transcraft_auth`（JSON 字段 `token`），`user` 不落本地：刷新页面后令牌仍在但 `user` 为空，因此需要 `fetchMe()` 重新拉取（路由守卫与管理页会触发，`MainLayout` 挂载时也会调用），这样角色变更不会沿用旧值。`fetchMe` 有短路逻辑：没有令牌或已有用户时直接返回，避免重复请求。`canManage` 计算属性只认 `admin` 与 `owner` 两个站点角色，决定顶栏「管理」入口是否显示。接口层的 `Authorization` 头不由 client 自己读存储，而是通过 `setTokenProvider` 注入读取函数，由 auth store 提供最新令牌，避免两边各存一份。
 
-`stores/ui.ts` 管理两项跨页面偏好，都落 `localStorage`：
+`stores/ui.ts` 通过 `persist.pick` 持久化两项偏好，键为 `transcraft_ui`：
 
-- `currentLanguage`（键 `transcraft_language`）：顶栏语言菜单选中的工作语言，影响仪表盘、项目详情、翻译页的取数语言。初次进入时若本地为空，`MainLayout` 会用用户的首要语言初始化。
-- `theme`（键 `transcraft_theme`）：`light` 或 `dark`。深色通过给 `body` 加 `arco-theme="dark"` 属性实现，Arco 会据此把整套 CSS 变量切到深色配色。
+- `currentLanguage`：顶栏语言菜单选中的工作语言，影响仪表盘、项目详情、翻译页的取数语言。初次进入时若本地为空，`MainLayout` 会用用户的首要语言初始化。
+- `themeChoice`：`system`、`light` 或 `dark`。`theme` 是计算属性，`system` 时取操作系统的深浅色偏好，其余情况固定为用户的选择。深色通过给 `body` 加 `arco-theme="dark"` 属性实现，Arco 会据此把整套 CSS 变量切到深色配色；切换主题请走 `toggleTheme`。
+
+界面语言由 `src/i18n/index.ts` 的 `useLocaleStore` 持久化，键为 `transcraft_i18n`，见 `docs/i18n.md`。
+
+本地记录属不可信输入。插件只负责反序列化与 `$patch`，不做校验：`ui` 与 `auth` 在 `persist.afterHydrate` 里把非法字段归一化为默认值（非字符串的工作语言与令牌、非法主题取值），界面语言则在 `initLocale` 里校验并应用。`afterHydrate` 只在反序列化成功时执行，反序列化失败时各字段保持 store 默认值，同样安全。
+
+存储键随本次改造改为 `transcraft_auth`、`transcraft_ui`、`transcraft_i18n`，旧键 `transcraft_token`、`transcraft_language`、`transcraft_theme`、`transcraft_locale` 不再读取，升级后会话与偏好会重置一次。
 
 ## 七、API 层与接口契约
 
@@ -269,7 +283,7 @@ fromLangSegment('zh-CN')    // 'zh_cn'
 | 部件 | `PartRole` | `maintainer` / `translator` | 仅作成员角色展示 |
 | 语言 | `LanguageRole` | `proofreader` / `translator` | 仅作成员角色展示 |
 
-这里有一个必须澄清的事实：**部件级与语言级成员角色目前不参与任何权限判定**。`LanguageRole` 在整个 `src/` 中只出现于 `api/types.ts` 与 `api/part.ts`，没有任何组件或守卫读取它。前端所有管理入口的显隐都由项目角色（`detail.role === 'owner' || 'maintainer'`）决定，批准权限则完全依赖服务端下发的 `PartDetail.canApprove`。按 `types.ts` 的注释，`canApprove` 的语义是「所有者/维护者，或所属项目中拥有 `approve` 权限的用户组成员」，Mock 的判定逻辑与此一致。
+这里有一个必须澄清的事实：**部件级与语言级成员角色目前不参与任何权限判定**。`PartRole` 与 `LanguageRole` 只用于成员表格的角色展示（`roleLabel` 取 `member.role.*` 的文案）与添加成员表单的取值约束，没有任何守卫或按钮显隐读取它们。前端所有管理入口的显隐都由项目角色（`detail.role === 'owner' || 'maintainer'`）决定，批准权限则完全依赖服务端下发的 `PartDetail.canApprove`。按 `types.ts` 的注释，`canApprove` 的语义是「所有者/维护者，或所属项目中拥有 `approve` 权限的用户组成员」，Mock 的判定逻辑与此一致。
 
 因此把某个用户配置为某语言的 `proofreader`，在当前实现里既不会让它看到额外入口，也不会解锁批准按钮。这属于已交付但未接线的能力，扩展权限体系时需要一并考虑是接线还是删除。
 
@@ -283,35 +297,37 @@ fromLangSegment('zh-CN')    // 'zh_cn'
 
 Dashboard（`pages/DashboardPage.vue`）展示关注项目的进度表，是本项目的默认落地页。点击行按 slug 进入项目详情。数据随 `ui.currentLanguage` 变化重新拉取。
 
-全部项目（`pages/ProjectsPage.vue`）列出站点所有项目，支持按名称、创建者、最后贡献时间三种排序（由 `sort` 查询参数驱动）。列表项的「最后贡献」把 UTC ISO 串转成本地日期显示，避免直接截断字符串造成日期偏差。
+全部项目（`pages/ProjectsPage.vue`）列出站点所有项目，支持按名称、创建者、最后贡献时间三种排序（由 `sort` 查询参数驱动）。列表项的「最后贡献」把 UTC ISO 串转成本地日期显示，避免直接截断字符串造成日期偏差，并按界面语言格式化（`src/format.ts` 的 `formatDate`）。
 
 添加项目（`pages/ProjectNewPage.vue`）与添加部件（`pages/ComponentNewPage.vue`）是表单页。部件表单的所属项目下拉只列出「关注的项目」，并支持通过 `?project=<id>` 查询参数预选（从项目详情页跳过来时会带上）。表单校验在提交时用 `validSlug` 复核一次，不依赖 Arco 的 `required` 规则，原因是 `projectId` 初值为数字 0 而 `required` 会把 0 视为已填，必须另行拦截。
 
-项目详情（`pages/ProjectDetailPage.vue`，571 行，工程内最大的页面）有四个页签：部件、成员、用户组、设置。后三个页签仅在项目角色为 owner 或 maintainer 时出现。部件页签内含语言选择器、部件进度表、各语言完成情况，以及复用同一弹窗的部件编辑入口。设置页签把「基本信息」与「文件」分组，并在 slug 变更后 `router.replace` 新地址。
+项目详情（`pages/ProjectDetailPage.vue`，572 行，工程内最大的页面）有四个页签：部件、成员、用户组、设置。后三个页签仅在项目角色为 owner 或 maintainer 时出现。部件页签内含语言选择器、部件进度表、各语言完成情况，以及复用同一弹窗的部件编辑入口。设置页签把「基本信息」与「文件」分组，并在 slug 变更后 `router.replace` 新地址。
 
 部件详情（`pages/PartDetailPage.vue`）有语言与成员两个页签。语言页签把各语言完成情况渲染成可点击列表，点击进入该语言的页面；成员页签可增删部件级成员。
 
 部件 × 语言页（`pages/PartLanguagePage.vue`）展示单语言的完成度卡片与语言成员，并提供「进入翻译」按钮。地址中的语言若不在部件的语言列表里，会直接以「该部件暂无此语言的文件」报错并给出重试入口。
 
-翻译工作台（`pages/PartTranslatePage.vue`，549 行）是核心页面。上方是编辑器面板（键名、模板语言原文、第一语言对照、当前译文输入框与操作按钮），下方是可筛选的条目列表。操作按钮按权限显隐：保存并继续、保存并停留、批准（仅 `canApprove` 时出现且已批准时禁用）、建议、跳过。
+翻译工作台（`pages/PartTranslatePage.vue`，552 行）是核心页面。上方是编辑器面板（键名、模板语言原文、第一语言对照、当前译文输入框与操作按钮），下方是可筛选的条目列表。操作按钮按权限显隐：保存并继续、保存并停留、批准（仅 `canApprove` 时出现且已批准时禁用）、建议、跳过。
 
 设置（`pages/SettingsPage.vue`）分个人资料与账号安全两个页签。个人资料表单跟随 `auth.user` 填表并设 `immediate: true`，因为刷新直达设置页时会话用户可能晚于本页挂载到达。保存成功后用 `auth.applyLogin` 把新资料写回 store，保持顶栏头像与显示名同步。
 
-管理后台（`pages/AdminPage.vue`）有用户管理、邀请码、用户组、站点链接四个页签。站点链接留空表示顶栏「更多」菜单不展示该项，保存后需重新进入站点才生效，这条提示直接写在了成功消息里。
+管理后台（`pages/AdminPage.vue`）有用户管理、邀请码、用户组、站点链接四个页签。用户与邀请码的时间列按界面语言格式化，不直接显示接口下发的 ISO 串。站点链接留空表示顶栏「更多」菜单不展示该项，保存后需重新进入站点才生效，这条提示直接写在了成功消息里。
 
-登录（`pages/LoginPage.vue`）与注册（`pages/RegisterPage.vue`）共用 `styles/auth.scss` 的居中卡片布局。注册页在挂载时查询 `register-config` 决定是否显示邀请码字段；发送邮箱验证码后进入 60 秒倒计时，组件卸载时清理定时器。若注册配置拉取失败，页面会提示「邀请码要求以提交时服务端校验为准」并继续，不阻塞注册流程。
+登录（`pages/LoginPage.vue`）与注册（`pages/RegisterPage.vue`）共用 `styles/auth.scss` 的居中卡片布局，右上角都有界面语言入口（`components/AuthLocaleMenu.vue`）。注册页在挂载时查询 `register-config` 决定是否显示邀请码字段；发送邮箱验证码后进入 60 秒倒计时，组件卸载时清理定时器。若注册配置拉取失败，页面会提示「邀请码要求以提交时服务端校验为准」并继续，不阻塞注册流程。
 
-关于页（`pages/AboutPage.vue`）是静态文案。
+关于页（`pages/AboutPage.vue`）是静态文案，内容取自语言包的 `about` 分组。
 
 ## 十、复用组件
 
-`components/ProgressTable.vue` 被仪表盘与项目详情共用，渲染「名称 + 八项统计 + 行内进度条」。表头文案由 `nameLabel` 属性决定（「项目」或「部件」）；名称列支持 `name` 具名插槽，项目详情页用它插入「编辑」按钮；行点击抛 `rowClick` 事件。已翻译 100% 的行不显示百分比数字，改显示一个对勾图标。
+`components/ProgressTable.vue` 被仪表盘与项目详情共用，渲染「名称 + 八项统计 + 行内进度条」。名称列表头由 `nameLabel` 属性传入，调用方按界面语言取词（仪表盘传 `$t('common.project')`，项目详情传 `$t('project_detail.part_label')`）；组件自身渲染的八项统计列头直接用 `table.*` 的键。名称列支持 `name` 具名插槽，项目详情页用它插入「编辑」按钮；行点击抛 `rowClick` 事件。已翻译 100% 的行不显示百分比数字，改显示一个对勾图标。
 
-`components/LanguageProgress.vue` 渲染单语言的进度条与「未完成 X / 共 Y 条」，`link` 为真时行可点击并抛 `rowClick`。它同时被项目详情、部件详情、语言页和翻译页的「完成情况」气泡复用。
+`components/LanguageProgress.vue` 渲染单语言的进度条与 `language_progress.summary`（「未完成 X / 共 Y 条」），`link` 为真时行可点击并抛 `rowClick`。它被项目详情的「各语言完成情况」、部件详情的语言页签，以及翻译页的「完成情况」气泡复用；部件 × 语言页有自己的完成度卡片，不使用这个组件。
 
 `components/PartEditModal.vue` 是部件配置弹窗，被项目详情的部件列表与部件详情页共用，目的是避免两份表单逻辑漂移。交互约定是：父级把要编辑的部件赋给 `part` 属性即触发弹窗打开（组件内部 `watch` 该属性并填表），保存成功以 `saved` 事件回传最新数据，关闭时以 `closed` 事件通知父级清空编辑目标，从而保证同一部件能再次打开。
 
-弹窗类的提交统一把 `onBeforeOk` 绑定到返回 `Promise<boolean>` 的函数，校验失败或请求失败时返回 `false` 保持弹窗打开，成功才返回 `true` 关闭。整个工程有六处遵循这个约定。
+弹窗类的提交统一把 `onBeforeOk` 绑定到返回 `Promise<boolean>` 的函数，校验失败或请求失败时返回 `false` 保持弹窗打开，成功才返回 `true` 关闭。整个工程有七处遵循这个约定。
+
+`components/AuthLocaleMenu.vue` 是登录页与注册页右上角的界面语言入口，两页共用一份下拉与语言表，避免各写一套导致可切换的语言不一致。它绝对定位在 `.auth-page` 的右上角，定位基准由 `styles/auth.scss` 里的 `.auth-page { position: relative }` 提供。它只改界面语言，与顶栏的翻译工作语言无关。
 
 ## 十一、Mock 后端
 
@@ -374,11 +390,11 @@ async function load() {
 
 之所以在 `router-view` 已经按 `fullPath` 重挂载的前提下还要写这个，是因为语言切换、项目切换等场景不会改变 `fullPath` 触发重挂载，只是重新取数，此时旧响应仍可能晚于新响应到达。
 
-**错误一律显式处理，不静默吞掉。** 每个 `catch` 都做两件事：`console.error` 输出带上下文的日志，以及通过 `Message.error` 或 `loadError` 给用户可见的反馈。用户可见文案的模式是 `error instanceof Error ? error.message : '兜底文案'`，这样能透出后端返回的具体原因（`ApiError` 的 `message`）。全局 401 是唯一在页面内提前返回的情形。
+**错误一律显式处理，不静默吞掉。** 每个 `catch` 都做两件事：`console.error` 输出带上下文的日志，以及通过 `Message.error` 或 `loadError` 给用户可见的反馈。用户可见文案的模式是 `error instanceof Error ? error.message : t('<失败提示键>')`，兜底文案取自语言包，这样既能在后端给出原因时透出 `ApiError` 的 `message`，又不会在拿不到消息时把原始异常直接显示给用户。`console.error` 的日志保持中文，因为它们面向开发者而不是界面。全局 401 是唯一在页面内提前返回的情形。
 
 **接口返回整表而非单项。** 成员与用户组的增删改接口都返回更新后的完整列表，前端直接整体替换 `memberList` / `groupList`，不做本地增删拼装。这样能避免前后端排序或过滤规则不一致导致的显示错乱。
 
-**状态枚举都有中文标签映射。** 项目中定义了四份 `roleLabels`（分别在 `ProjectDetailPage`、`PartDetailPage`、`PartLanguagePage`、`AdminPage`），以 `Record<Role, string>` 的形式集中管理，模板里直接查表而非写条件分支。
+**角色标签统一走 i18n 函数。** 四个页面各有一个 `roleLabel(role)` 小函数（`ProjectDetailPage`、`PartDetailPage`、`PartLanguagePage`、`AdminPage`），内部按 `` `member.role.${role}` `` 或 `` `admin.role.${role}` `` 取词。这里刻意不用 `Record<Role, string>` 常量：常量只在模块初始化时求值一次，切换界面语言后不会更新，函数则每次渲染都按当前语言取词。
 
 **注释解释为什么。** 源码中的注释密度较高，但基本都在说明动机与约束而非复述代码，例如为什么 `initTheme` 要在挂载前调用、为什么同步开关打开时提交空串、为什么 `required` 拦不住 `projectId` 的 0。新增代码应延续这个标准。
 
@@ -386,7 +402,7 @@ async function load() {
 
 以下问题是本次分析中通过读代码确认的，按严重程度排列。
 
-**翻译条目列表的排序与注释相反（`pages/PartTranslatePage.vue:42-44`）。** 代码是：
+**翻译条目列表的排序与注释相反（`pages/PartTranslatePage.vue:44-47`）。** 代码是：
 
 ```ts
 const sortedEntries = computed(() => {
@@ -398,7 +414,7 @@ const sortedEntries = computed(() => {
 
 这个缺陷不影响功能正确性，因为 `nextUntranslated()` 是在 `filteredEntries` 上独立查找的，不依赖排序结果；但列表的展示顺序与设计意图不符，而默认选中的是第一条未翻译条目，用户会在列表顶部看到已翻译内容、选中的条目却在下方。
 
-**`PartEditModal` 的样式声明与模板类名不匹配（`components/PartEditModal.vue:125-189`）。** 模板里给元素写的是 `class="part-edit__group-title"` 这类完整类名，而样式块定义的是嵌套选择器：
+**`PartEditModal` 的样式声明与模板类名不匹配（`components/PartEditModal.vue:109-174` 的模板与 `:177-193` 的样式块）。** 模板里给元素写的是 `class="part-edit__group-title"` 这类完整类名，而样式块定义的是嵌套选择器：
 
 ```scss
 .part-edit {
@@ -422,7 +438,9 @@ const sortedEntries = computed(() => {
 
 `main.ts` 全量注册了 `ArcoVue` 与 `ArcoVueIcon`，没有按需引入。当前包体规模下问题不大，但 Arco 全量组件加全量图标对首屏体积有实际影响，是后续优化构建产物的第一个着手点。
 
-界面多语言的机制已经就位（vue-i18n 与 `src/locale/` 语言包，见 `docs/i18n.md`），但文案只迁移了顶栏、登录页、仪表盘与进度表，其余页面仍是中文字面量，包括 `Message.error` 的提示语，因此切到英文会出现中英混合。后续新增或改动页面时顺手把文案抽进语言包，并补齐 `zh` 与 `en` 两份。
+界面文案已全部迁移到 `src/locale/` 下的 `zh.json` 与 `en.json`（机制见 `docs/i18n.md`）：页面、共用组件、`Message` 提示、`Modal` 确认框与浏览器标签页标题都走 vue-i18n，两份语言包的键完全对齐。新增或改动页面时应继续把文案抽进语言包，并同时补齐 `zh` 与 `en`，漏键不会编译报错，只会静默回落到英文。
+
+仍有一处界面可见文案不在语言包里：`api/client.ts` 在响应体里取不到 `message` 时使用的兜底错误 `请求失败（HTTP 状态码）`。它属于接口层，若要把接口层也接入界面语言，需要像 `setTokenProvider` 那样注入一个取词函数，避免 client 反向依赖 i18n。
 
 `stores/ui.ts` 的 `initTheme` 里注册的系统主题变化监听没有对应的移除逻辑。这在应用生命周期内不会造成泄漏（单次调用），但若将来需要在组件中重复调用该方法就需要处理。
 

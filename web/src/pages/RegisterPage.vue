@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import { register, registerConfig, sendEmailCode } from '../api/auth'
 import { redirectTarget } from '../router/redirect'
 import { useAuthStore } from '../stores/auth'
+import AuthLocaleMenu from '../components/AuthLocaleMenu.vue'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const CODE_RESEND_SECONDS = 60
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -32,7 +36,7 @@ onMounted(async () => {
     inviteRequired.value = (await registerConfig()).inviteRequired
   } catch (error) {
     console.error('获取注册配置失败:', error)
-    Message.error('获取注册配置失败，邀请码要求以提交时服务端校验为准')
+    Message.error(t('register.config_failed'))
   }
 })
 
@@ -55,7 +59,7 @@ function startCountdown() {
 
 async function sendCode() {
   if (!EMAIL_PATTERN.test(form.email)) {
-    Message.warning('请输入正确的邮箱地址')
+    Message.warning(t('register.email_invalid'))
     return
   }
   if (sendingCode.value || countdown.value > 0) {
@@ -64,11 +68,11 @@ async function sendCode() {
   sendingCode.value = true
   try {
     await sendEmailCode(form.email)
-    Message.success('验证码已发送，请查收邮件')
+    Message.success(t('register.code_sent'))
     startCountdown()
   } catch (error) {
     console.error('发送邮箱验证码失败:', error)
-    Message.error(error instanceof Error ? error.message : '验证码发送失败，请稍后重试')
+    Message.error(error instanceof Error ? error.message : t('register.code_send_failed'))
   } finally {
     sendingCode.value = false
   }
@@ -76,16 +80,16 @@ async function sendCode() {
 
 function validate(): string {
   if (!form.username || !form.email || !form.password || !form.emailCode) {
-    return '请完整填写用户名、邮箱、密码和邮箱验证码'
+    return t('register.fill_all_fields')
   }
   if (!EMAIL_PATTERN.test(form.email)) {
-    return '邮箱格式不正确'
+    return t('register.email_invalid')
   }
   if (form.password !== form.confirmPassword) {
-    return '两次输入的密码不一致'
+    return t('register.password_mismatch')
   }
   if (inviteRequired.value && !form.inviteCode) {
-    return '当前站点启用了邀请码注册，请填写邀请码'
+    return t('register.invite_required')
   }
   return ''
 }
@@ -112,7 +116,7 @@ async function submit() {
     await router.replace(redirectTarget(route.query))
   } catch (error) {
     console.error('注册失败:', error)
-    Message.error(error instanceof Error ? error.message : '注册失败，请稍后重试')
+    Message.error(error instanceof Error ? error.message : t('register.register_failed'))
   } finally {
     loading.value = false
   }
@@ -121,43 +125,45 @@ async function submit() {
 
 <template>
   <div class="auth-page">
+    <AuthLocaleMenu />
+
     <a-card class="auth-card" :bordered="false">
       <div class="auth-card__brand">
         <img src="/favicon.svg" alt="TransCraft" class="auth-card__logo" />
         <span class="auth-card__name">TransCraft</span>
       </div>
-      <a-typography-title :heading="5" class="auth-card__title">注册账号</a-typography-title>
+      <a-typography-title :heading="5" class="auth-card__title">{{ $t('register.title') }}</a-typography-title>
 
       <a-form :model="form" layout="vertical" @submit-success="submit">
-        <a-form-item field="username" label="用户名" hide-asterisk>
-          <a-input v-model="form.username" placeholder="用户名" allow-clear />
+        <a-form-item field="username" :label="$t('register.username')" hide-asterisk>
+          <a-input v-model="form.username" :placeholder="$t('register.username')" allow-clear />
         </a-form-item>
-        <a-form-item field="email" label="邮箱" hide-asterisk>
-          <a-input v-model="form.email" placeholder="邮箱" allow-clear />
+        <a-form-item field="email" :label="$t('register.email')" hide-asterisk>
+          <a-input v-model="form.email" :placeholder="$t('register.email')" allow-clear />
         </a-form-item>
-        <a-form-item field="emailCode" label="邮箱验证码" hide-asterisk>
+        <a-form-item field="emailCode" :label="$t('register.email_code')" hide-asterisk>
           <div class="auth-code-row">
-            <a-input v-model="form.emailCode" placeholder="验证码" allow-clear />
+            <a-input v-model="form.emailCode" :placeholder="$t('register.email_code_placeholder')" allow-clear />
             <a-button :loading="sendingCode" :disabled="countdown > 0" @click="sendCode">
-              {{ countdown > 0 ? `重新发送（${countdown}s）` : '发送验证码' }}
+              {{ countdown > 0 ? $t('register.resend_code', { seconds: countdown }) : $t('register.send_code') }}
             </a-button>
           </div>
         </a-form-item>
-        <a-form-item field="password" label="密码" hide-asterisk>
-          <a-input-password v-model="form.password" placeholder="密码" />
+        <a-form-item field="password" :label="$t('register.password')" hide-asterisk>
+          <a-input-password v-model="form.password" :placeholder="$t('register.password')" />
         </a-form-item>
-        <a-form-item field="confirmPassword" label="确认密码" hide-asterisk>
-          <a-input-password v-model="form.confirmPassword" placeholder="再次输入密码" />
+        <a-form-item field="confirmPassword" :label="$t('register.confirm_password')" hide-asterisk>
+          <a-input-password v-model="form.confirmPassword" :placeholder="$t('register.confirm_password_placeholder')" />
         </a-form-item>
-        <a-form-item v-if="inviteRequired" field="inviteCode" label="邀请码" hide-asterisk>
-          <a-input v-model="form.inviteCode" placeholder="本站已启用邀请码注册" allow-clear />
+        <a-form-item v-if="inviteRequired" field="inviteCode" :label="$t('register.invite_code')" hide-asterisk>
+          <a-input v-model="form.inviteCode" :placeholder="$t('register.invite_code_placeholder')" allow-clear />
         </a-form-item>
-        <a-button type="primary" long html-type="submit" :loading="loading">注册</a-button>
+        <a-button type="primary" long html-type="submit" :loading="loading">{{ $t('register.submit') }}</a-button>
       </a-form>
 
       <div class="auth-card__footer">
-        已有账号？
-        <router-link :to="{ name: 'login', query: route.query }">直接登录</router-link>
+        {{ $t('register.has_account') }}
+        <router-link :to="{ name: 'login', query: route.query }">{{ $t('register.go_login') }}</router-link>
       </div>
     </a-card>
   </div>

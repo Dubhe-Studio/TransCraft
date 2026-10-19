@@ -1,6 +1,8 @@
+import { watch } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import { setUnauthorizedHandler } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { i18n } from '@/i18n'
 import { redirectTarget } from './redirect'
 import MainLayout from '../layouts/MainLayout.vue'
 import LoginPage from '../pages/LoginPage.vue'
@@ -18,39 +20,43 @@ import AdminPage from '../pages/AdminPage.vue'
 import AboutPage from '../pages/AboutPage.vue'
 import ProjectsPage from '../pages/ProjectsPage.vue'
 
+// 站点名固定不翻译，与页面标题以 " · " 连接
+const SITE_NAME = 'TransCraft'
+
 declare module 'vue-router' {
   interface RouteMeta {
     guest?: boolean
     requiresAuth?: boolean
     requiresAdmin?: boolean
-    title?: string
+    // 标签页标题的 i18n 键，取值为路由自身语言下的页面名
+    titleKey?: string
   }
 }
 
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/login', name: 'login', component: LoginPage, meta: { guest: true, title: '登录' } },
-    { path: '/register', name: 'register', component: RegisterPage, meta: { guest: true, title: '注册' } },
+    { path: '/login', name: 'login', component: LoginPage, meta: { guest: true, titleKey: 'route.login' } },
+    { path: '/register', name: 'register', component: RegisterPage, meta: { guest: true, titleKey: 'route.register' } },
     {
       path: '/',
       component: MainLayout,
       meta: { requiresAuth: true },
       children: [
         { path: '', redirect: '/dashboard' },
-        { path: 'dashboard', name: 'dashboard', component: DashboardPage, meta: { title: 'Dashboard' } },
-        { path: 'projects/new', name: 'project-new', component: ProjectNewPage, meta: { title: '添加项目' } },
-        { path: 'projects', name: 'projects', component: ProjectsPage, meta: { title: '全部项目' } },
-        { path: 'projects/:slug', name: 'project-detail', component: ProjectDetailPage, meta: { title: '项目详情' } },
-        { path: 'components/new', name: 'component-new', component: ComponentNewPage, meta: { title: '添加部件' } },
+        { path: 'dashboard', name: 'dashboard', component: DashboardPage, meta: { titleKey: 'route.dashboard' } },
+        { path: 'projects/new', name: 'project-new', component: ProjectNewPage, meta: { titleKey: 'route.project_new' } },
+        { path: 'projects', name: 'projects', component: ProjectsPage, meta: { titleKey: 'route.projects' } },
+        { path: 'projects/:slug', name: 'project-detail', component: ProjectDetailPage, meta: { titleKey: 'route.project_detail' } },
+        { path: 'components/new', name: 'component-new', component: ComponentNewPage, meta: { titleKey: 'route.component_new' } },
         // 部件与语言页面以 项目 slug + 部件 slug + 语言段 三级地址寻址，语言段形如 zh-CN
-        { path: 'projects/:slug/parts/:partSlug', name: 'part-detail', component: PartDetailPage, meta: { title: '部件详情' } },
-        { path: 'projects/:slug/parts/:partSlug/:lang', name: 'part-language', component: PartLanguagePage, meta: { title: '语言进度' } },
-        { path: 'projects/:slug/parts/:partSlug/:lang/translate', name: 'part-translate', component: PartTranslatePage, meta: { title: '翻译' } },
-        { path: 'settings', name: 'settings', component: SettingsPage, meta: { title: '设置' } },
-        { path: 'users/:name', name: 'user-home', component: UserHomePage, meta: { title: '用户主页' } },
-        { path: 'admin', name: 'admin', component: AdminPage, meta: { title: '管理', requiresAdmin: true } },
-        { path: 'about', name: 'about', component: AboutPage, meta: { title: '关于' } },
+        { path: 'projects/:slug/parts/:partSlug', name: 'part-detail', component: PartDetailPage, meta: { titleKey: 'route.part_detail' } },
+        { path: 'projects/:slug/parts/:partSlug/:lang', name: 'part-language', component: PartLanguagePage, meta: { titleKey: 'route.part_language' } },
+        { path: 'projects/:slug/parts/:partSlug/:lang/translate', name: 'part-translate', component: PartTranslatePage, meta: { titleKey: 'route.part_translate' } },
+        { path: 'settings', name: 'settings', component: SettingsPage, meta: { titleKey: 'route.settings' } },
+        { path: 'users/:name', name: 'user-home', component: UserHomePage, meta: { titleKey: 'route.user_home' } },
+        { path: 'admin', name: 'admin', component: AdminPage, meta: { titleKey: 'route.admin', requiresAdmin: true } },
+        { path: 'about', name: 'about', component: AboutPage, meta: { titleKey: 'route.about' } },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
@@ -95,6 +101,15 @@ setUnauthorizedHandler(() => {
   })
 })
 
+// 标签页标题由路由的 i18n 键与当前界面语言共同决定，切换语言后同一页面也要重算
+function applyDocumentTitle(titleKey?: string): void {
+  document.title = titleKey ? `${i18n.global.t(titleKey)} · ${SITE_NAME}` : SITE_NAME
+}
+
 router.afterEach((to) => {
-  document.title = to.meta.title ? `${to.meta.title} · TransCraft` : 'TransCraft'
+  applyDocumentTitle(to.meta.titleKey)
+})
+
+watch(i18n.global.locale, () => {
+  applyDocumentTitle(router.currentRoute.value.meta.titleKey)
 })

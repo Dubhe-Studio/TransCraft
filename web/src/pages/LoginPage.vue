@@ -5,14 +5,13 @@ import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import { redirectTarget } from '../router/redirect'
 import { useAuthStore } from '../stores/auth'
-import { useLocaleStore } from '@/i18n'
+import AuthLocaleMenu from '../components/AuthLocaleMenu.vue'
 
 const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const localeStore = useLocaleStore()
 
 const form = reactive({ account: '', password: '' })
 const loading = ref(false)
@@ -40,26 +39,7 @@ async function submit() {
 
 <template>
   <div class="auth-page">
-    <div class="login-locale">
-      <a-dropdown trigger="hover">
-        <a-button type="text">
-          <template #icon>
-            <icon-language />
-          </template>
-          {{ localeStore.current.label }} <icon-down />
-        </a-button>
-        <template #content>
-          <a-doption
-            v-for="item in localeStore.locales"
-            :key="item.code"
-            :disabled="item.code === localeStore.locale"
-            @click="localeStore.setLocale(item.code)"
-          >
-            {{ item.label }}
-          </a-doption>
-        </template>
-      </a-dropdown>
-    </div>
+    <AuthLocaleMenu />
 
     <a-card class="auth-card" :bordered="false">
       <div class="auth-card__brand">
@@ -88,15 +68,4 @@ async function submit() {
 
 <style scoped lang="scss">
 @use '../styles/auth.scss';
-
-// 语言入口贴页面右上角，卡片本身仍然居中
-.auth-page {
-  position: relative;
-}
-
-.login-locale {
-  position: absolute;
-  top: 24px;
-  right: 24px;
-}
 </style>

@@ -1,11 +1,14 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import { supportedLanguages } from '../api/language'
 import { createProject } from '../api/project'
-import { validSlug, SLUG_MESSAGE } from '../slug'
+import { validSlug } from '../slug'
 import type { LanguageInfo, ProjectInput } from '../api/types'
+
+const { t } = useI18n()
 
 const router = useRouter()
 
@@ -28,24 +31,24 @@ onMounted(async () => {
     languageList.value = await supportedLanguages()
   } catch (error) {
     console.error('加载语言列表失败:', error)
-    Message.error('加载语言列表失败，请刷新重试')
+    Message.error(t('common.load_languages_failed'))
   }
 })
 
 async function submit() {
   const slug = form.slug.trim()
   if (!validSlug(slug)) {
-    Message.error(`地址标识${SLUG_MESSAGE}`)
+    Message.error(t('slug.invalid'))
     return
   }
   submitting.value = true
   try {
     const created = await createProject({ ...form, slug })
-    Message.success('项目创建成功')
+    Message.success(t('project_new.created'))
     router.push({ name: 'project-detail', params: { slug: created.slug } })
   } catch (error) {
     console.error('创建项目失败:', error)
-    Message.error(error instanceof Error ? error.message : '创建失败')
+    Message.error(error instanceof Error ? error.message : t('project_new.create_failed'))
   } finally {
     submitting.value = false
   }
@@ -54,35 +57,35 @@ async function submit() {
 
 <template>
   <div class="project-new">
-    <a-typography-title :heading="5">添加项目</a-typography-title>
+    <a-typography-title :heading="5">{{ $t('project_new.title') }}</a-typography-title>
 
     <a-form :model="form" layout="vertical" class="project-new__form" @submit-success="submit">
-      <a-form-item field="name" label="项目名称" required :rules="[{ required: true, message: '项目名称不能为空' }]">
-        <a-input v-model="form.name" placeholder="例如 Create" allow-clear />
+      <a-form-item field="name" :label="$t('project.name')" required :rules="[{ required: true, message: $t('project.name_required') }]">
+        <a-input v-model="form.name" :placeholder="$t('project_new.name_placeholder')" allow-clear />
       </a-form-item>
-      <a-form-item field="slug" label="地址标识" required :extra="SLUG_MESSAGE">
-        <a-input v-model="form.slug" placeholder="例如 create" allow-clear />
+      <a-form-item field="slug" :label="$t('slug.label')" required :extra="$t('slug.hint')">
+        <a-input v-model="form.slug" :placeholder="$t('project_new.slug_placeholder')" allow-clear />
       </a-form-item>
-      <a-form-item field="namespace" label="命名空间" required :rules="[{ required: true, message: '命名空间不能为空' }]">
-        <a-input v-model="form.namespace" placeholder="例如 create" allow-clear />
+      <a-form-item field="namespace" :label="$t('project.namespace')" required :rules="[{ required: true, message: $t('project.namespace_required') }]">
+        <a-input v-model="form.namespace" :placeholder="$t('project_new.namespace_placeholder')" allow-clear />
       </a-form-item>
-      <a-form-item field="description" label="项目简介">
-        <a-textarea v-model="form.description" placeholder="一句话介绍这个项目" :auto-size="{ minRows: 2 }" allow-clear />
+      <a-form-item field="description" :label="$t('project.description')">
+        <a-textarea v-model="form.description" :placeholder="$t('project_new.description_placeholder')" :auto-size="{ minRows: 2 }" allow-clear />
       </a-form-item>
-      <a-form-item field="fileMask" label="语言文件掩码" extra="相对仓库根目录的路径，例如 src/main/resources/assets/create/lang/*.json；部件可选择同步此项">
+      <a-form-item field="fileMask" :label="$t('project.file_mask')" :extra="$t('project_new.file_mask_hint')">
         <a-input v-model="form.fileMask" placeholder="src/main/resources/assets/*/lang/*.json" allow-clear />
       </a-form-item>
-      <a-form-item field="templatePath" label="翻译模板文件" extra="生成新语言文件时使用的模板路径">
+      <a-form-item field="templatePath" :label="$t('project.template_path')" :extra="$t('project_new.template_path_hint')">
         <a-input v-model="form.templatePath" placeholder="src/main/resources/assets/create/lang/en_us.json" allow-clear />
       </a-form-item>
-      <a-form-item field="referenceLanguage" label="参考语言">
+      <a-form-item field="referenceLanguage" :label="$t('project.reference_language')">
         <a-select v-model="form.referenceLanguage" :options="languageList.map((l) => ({ label: l.name, value: l.code }))" />
       </a-form-item>
 
       <a-form-item>
         <a-space>
-          <a-button type="primary" html-type="submit" :loading="submitting">创建项目</a-button>
-          <a-button @click="router.push({ name: 'dashboard' })">取消</a-button>
+          <a-button type="primary" html-type="submit" :loading="submitting">{{ $t('project_new.create') }}</a-button>
+          <a-button @click="router.push({ name: 'dashboard' })">{{ $t('common.cancel') }}</a-button>
         </a-space>
       </a-form-item>
     </a-form>

@@ -1,5 +1,7 @@
 // 登录 / 注册页共享的居中卡片布局
 .auth-page {
+  // 语言入口绝对定位到右上角，需要这里提供定位基准
+  position: relative;
   min-height: 100%;
   display: flex;
   align-items: center;

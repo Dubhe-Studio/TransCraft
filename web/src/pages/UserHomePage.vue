@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { userProfile } from '../api/user'
 import type { UserPublicProfile } from '../api/types'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -20,7 +23,7 @@ async function load() {
     profile.value = await userProfile(username)
   } catch (error) {
     console.error('加载用户主页失败:', error)
-    loadError.value = error instanceof Error ? error.message : '加载失败'
+    loadError.value = error instanceof Error ? error.message : t('user_home.load_failed')
   } finally {
     loading.value = false
   }
@@ -34,7 +37,7 @@ onMounted(load)
     <a-spin :loading="loading" class="user-home__spin">
       <a-result v-if="loadError" status="error" :title="loadError">
         <template #extra>
-          <a-button type="primary" @click="load">重试</a-button>
+          <a-button type="primary" @click="load">{{ $t('common.retry') }}</a-button>
         </template>
       </a-result>
 
@@ -49,16 +52,16 @@ onMounted(load)
               <a-typography-text type="secondary">@{{ profile.username }}</a-typography-text>
             </a-typography-title>
             <a-typography-text type="secondary">
-              首要语言 {{ profile.primaryLanguage }}
+              {{ $t('user_home.primary_language', { language: profile.primaryLanguage }) }}
               <template v-if="profile.secondaryLanguages.length > 0">
-                · 次要语言 {{ profile.secondaryLanguages.join('、') }}
+                · {{ $t('user_home.secondary_languages', { languages: profile.secondaryLanguages.join($t('common.list_separator')) }) }}
               </template>
             </a-typography-text>
           </div>
         </div>
 
-        <a-typography-title :heading="6">关注的项目</a-typography-title>
-        <a-empty v-if="profile.followed.length === 0" description="还没有关注的项目" />
+        <a-typography-title :heading="6">{{ $t('user_home.followed_projects') }}</a-typography-title>
+        <a-empty v-if="profile.followed.length === 0" :description="$t('common.no_followed_projects')" />
         <a-list v-else :data="profile.followed" :bordered="false">
           <template #item="{ item }">
             <a-list-item class="user-home__project" @click="router.push({ name: 'project-detail', params: { slug: item.slug } })">

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // 项目与部件页共用的各语言完成情况列表：语言名 + 进度条 + 未完成条数
 // link 为真时每行可点击，由父级在 row-click 中决定跳转目标
+import { useLocaleStore } from '@/i18n'
+import { formatNumber } from '../format'
 import type { LanguageProgress } from '../api/types'
 
 defineProps<{
@@ -12,14 +14,12 @@ const emit = defineEmits<{
   rowClick: [row: LanguageProgress]
 }>()
 
-function formatNumber(value: number): string {
-  return value.toLocaleString()
-}
+const localeStore = useLocaleStore()
 </script>
 
 <template>
   <div class="language-progress">
-    <a-empty v-if="rows.length === 0" description="暂无语言进度数据" />
+    <a-empty v-if="rows.length === 0" :description="$t('language_progress.empty')" />
     <div
       v-for="row in rows"
       :key="row.code"
@@ -39,7 +39,10 @@ function formatNumber(value: number): string {
         track-color="var(--color-fill-2)"
       />
       <div class="language-progress__meta">
-        未完成 {{ formatNumber(row.untranslatedStrings) }} / 共 {{ formatNumber(row.totalStrings) }} 条
+        {{ $t('language_progress.summary', {
+          unfinished: formatNumber(row.untranslatedStrings, localeStore.current.bcp47),
+          total: formatNumber(row.totalStrings, localeStore.current.bcp47),
+        }) }}
       </div>
     </div>
   </div>

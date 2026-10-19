@@ -10,8 +10,6 @@ export class ApiError extends Error {
   }
 }
 
-const TOKEN_KEY = 'transcraft_token'
-
 // 401 时统一清理会话并跳回登录页；由路由模块注入，避免 client 反向依赖 router
 let onUnauthorized: (() => void) | undefined
 
@@ -19,21 +17,16 @@ export function setUnauthorizedHandler(handler: () => void): void {
   onUnauthorized = handler
 }
 
-export function readToken(): string {
-  return localStorage.getItem(TOKEN_KEY) ?? ''
-}
+// 令牌由 auth store 持有并持久化；这里只保存读取函数，避免 client 反向依赖 store 造成循环引用
+let tokenProvider: () => string = () => ''
 
-export function writeToken(token: string): void {
-  if (token) {
-    localStorage.setItem(TOKEN_KEY, token)
-  } else {
-    localStorage.removeItem(TOKEN_KEY)
-  }
+export function setTokenProvider(provider: () => string): void {
+  tokenProvider = provider
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
-  const token = readToken()
+  const token = tokenProvider()
   if (token) {
     headers.Authorization = `Bearer ${token}`
   }

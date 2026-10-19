@@ -1,4 +1,4 @@
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { addI18nMessages, useLocale } from '@arco-design/web-vue/es/locale'
@@ -6,8 +6,9 @@ import arcoEnUS from '@arco-design/web-vue/es/locale/lang/en-us'
 import arcoZhCN from '@arco-design/web-vue/es/locale/lang/zh-cn'
 import { messages, type LocaleCode } from '@/locale'
 
-// 此处的界面语言（transcraft_locale）只决定界面文案，与顶栏的翻译工作语言（stores/ui.ts 的 transcraft_language）无关
-const LOCALE_KEY = 'transcraft_locale'
+// 此处的界面语言（transcraft_i18n）只决定界面文案，与顶栏的翻译工作语言（stores/ui.ts 的 transcraft_ui.currentLanguage）无关
+// 不复用旧版存裸字符串的 transcraft_locale 键：旧格式会被 JSON 反序列化判为坏数据，留在同一键上会持续报错
+const LOCALE_KEY = 'transcraft_i18n'
 
 /** 界面语言的语言代码之外的属性 */
 interface LocaleMeta {
@@ -40,18 +41,8 @@ addI18nMessages({
   'en-US': arcoEnUS,
 })
 
-// 界面语言记录来自 localStorage，属不可信输入；`in` 会命中原型链（constructor 之类），必须用 hasOwn
-function storedLocale(): LocaleCode | null {
-  const stored = localStorage.getItem(LOCALE_KEY)
-  return stored !== null && Object.hasOwn(localeTable, stored) ? (stored as LocaleCode) : null
-}
-
-// 用户未选择过界面语言时，按浏览器给出的语言偏好顺序取第一个能匹配到的界面语言，都不匹配时用英文
+// 没有可用的本地记录时，按浏览器给出的语言偏好顺序取第一个能匹配到的界面语言，都不匹配时用英文
 function detectLocale(): LocaleCode {
-  const stored = storedLocale()
-  if (stored) {
-    return stored
-  }
   for (const tag of navigator.languages) {
     // 语言标签只取主语言子标签比对，zh-CN、zh-Hant-TW 都归到 zh
     const matched = locales.find((item) => item.code === tag.split('-')[0].toLowerCase())
@@ -62,11 +53,18 @@ function detectLocale(): LocaleCode {
   return 'en'
 }
 
+// 本地记录来自 localStorage，属不可信输入；`in` 会命中原型链（constructor 之类），必须用 hasOwn
+function pickLocale(value: unknown): LocaleCode {
+  return typeof value === 'string' && Object.hasOwn(localeTable, value) ? (value as LocaleCode) : detectLocale()
+}
+
+// 没有可用的本地记录时的界面语言，同时作为 vue-i18n 与 store 的初值
 const initialLocale = detectLocale()
 
 export const i18n = createI18n({
   legacy: false,
   globalInjection: true,
+  // 持久化的界面语言在 useLocaleStore 初始化时覆盖这里的初值
   locale: initialLocale,
   fallbackLocale: 'en',
   messages,
@@ -79,20 +77,36 @@ function applyLocale(code: LocaleCode): void {
   useLocale(bcp47)
 }
 
-// 语言在模块加载时即生效，不能等到某个调用方记得同步，否则 html lang 与 Arco 文案会与界面语言脱节
-applyLocale(initialLocale)
+export const useLocaleStore = defineStore(
+  'locale',
+  () => {
+    // vue-i18n 的 locale 由这里同步；切换请走 setLocale：它会一并更新 html lang 与 Arco 文案，本地记录由持久化插件负责
+    const locale = ref<LocaleCode>(initialLocale)
+    // 当前界面语言的完整选项，供界面展示当前语言名称
+    const current = computed<LocaleOption>(() => ({ code: locale.value, ...localeTable[locale.value] }))
 
-export const useLocaleStore = defineStore('locale', () => {
-  // vue-i18n 的 locale 就是界面语言的状态，切换请走 setLocale：它会一并同步 html lang、Arco 文案与本地记录
-  const locale = computed<LocaleCode>(() => i18n.global.locale.value)
-  // 当前界面语言的完整选项，供界面展示当前语言名称
-  const current = computed<LocaleOption>(() => ({ code: locale.value, ...localeTable[locale.value] }))
+    /** 切换界面语言：同步语言包、html lang 与 Arco 组件文案，并由持久化插件记住用户的选择 */
+    function setLocale(code: LocaleCode): void {
+      locale.value = code
+      applyLocale(code)
+    }
 
-  /** 切换界面语言：同步语言包、html lang 与 Arco 组件文案，并记住用户的选择 */
-  function setLocale(code: LocaleCode): void {
-    applyLocale(code)
-    localStorage.setItem(LOCALE_KEY, code)
-  }
+    /**
+     * 首帧渲染前由 main.ts 调用一次：校验持久化恢复的语言并立即生效。
+     * 不用 persist.afterHydrate 是因为反序列化失败时该钩子不会执行，界面语言就只剩 vue-i18n 生效，
+     * html lang 与 Arco 文案会停留在旧值。
+     */
+    function initLocale(): void {
+      locale.value = pickLocale(locale.value)
+      applyLocale(locale.value)
+    }
 
-  return { locale, current, locales, setLocale }
-})
+    return { locale, current, locales, setLocale, initLocale }
+  },
+  {
+    persist: {
+      key: LOCALE_KEY,
+      pick: ['locale'],
+    },
+  },
+)

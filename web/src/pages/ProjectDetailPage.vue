@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Message } from '@arco-design/web-vue'
 import {
   addMember,
@@ -18,7 +19,7 @@ import {
   projectGroups,
   updateProjectGroup,
 } from '../api/group'
-import { validSlug, SLUG_MESSAGE } from '../slug'
+import { validSlug } from '../slug'
 import type {
   LanguageInfo,
   LanguageProgress as LanguageProgressRow,
@@ -34,6 +35,8 @@ import ProgressTable from '../components/ProgressTable.vue'
 import LanguageProgress from '../components/LanguageProgress.vue'
 import PartEditModal from '../components/PartEditModal.vue'
 import { useUiStore } from '../stores/ui'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -55,10 +58,8 @@ const loadError = ref('')
 // 当前用户在项目内的角色，owner/maintainer 可见管理入口
 const canManage = computed(() => detail.value?.role === 'owner' || detail.value?.role === 'maintainer')
 
-const roleLabels: Record<ProjectRole, string> = {
-  owner: '所有者',
-  maintainer: '维护者',
-  translator: '译者',
+function roleLabel(role: ProjectRole): string {
+  return t(`member.role.${role}`)
 }
 
 // 路由组件复用（关注列表连续打开两个项目、设置页改 slug）时旧请求不得覆盖新数据
@@ -90,7 +91,7 @@ async function load() {
   } catch (error) {
     if (seq !== loadSeq) return
     console.error('加载项目详情失败:', error)
-    loadError.value = error instanceof Error ? error.message : '加载失败'
+    loadError.value = error instanceof Error ? error.message : t('project_detail.load_failed')
   } finally {
     if (seq === loadSeq) {
       loading.value = false
@@ -110,7 +111,7 @@ watch(() => ui.currentLanguage, async () => {
   } catch (error) {
     if (seq !== partsSeq) return
     console.error('加载部件进度失败:', error)
-    Message.error(error instanceof Error ? error.message : '加载部件进度失败')
+    Message.error(error instanceof Error ? error.message : t('project_detail.parts_load_failed'))
   }
 })
 
@@ -129,19 +130,19 @@ const addSubmitting = ref(false)
 // 返回是否允许关闭弹窗，校验失败或提交失败时保持弹窗打开
 async function submitAddMember(): Promise<boolean> {
   if (!addForm.username) {
-    Message.error('用户名不能为空')
+    Message.error(t('member.username_required'))
     return false
   }
   addSubmitting.value = true
   try {
     memberList.value = await addMember(projectId.value, addForm.username, addForm.role)
-    Message.success('成员已添加')
+    Message.success(t('member.added'))
     addForm.username = ''
     addForm.role = 'translator'
     return true
   } catch (error) {
     console.error('添加成员失败:', error)
-    Message.error(error instanceof Error ? error.message : '添加失败')
+    Message.error(error instanceof Error ? error.message : t('member.add_failed'))
     return false
   } finally {
     addSubmitting.value = false
@@ -152,10 +153,10 @@ async function confirmRemove(member: ProjectMember) {
   try {
     await removeMember(projectId.value, member.username)
     memberList.value = memberList.value.filter((m) => m.username !== member.username)
-    Message.success(`已移除 ${member.displayName}`)
+    Message.success(t('member.removed', { name: member.displayName }))
   } catch (error) {
     console.error('移除成员失败:', error)
-    Message.error(error instanceof Error ? error.message : '移除失败')
+    Message.error(error instanceof Error ? error.message : t('member.remove_failed'))
   }
 }
 
@@ -189,7 +190,7 @@ function openEditGroup(group: ProjectGroup) {
 async function submitGroup(): Promise<boolean> {
   const name = groupForm.name.trim()
   if (!name) {
-    Message.error('用户组名称不能为空')
+    Message.error(t('project_detail.group.name_required'))
     return false
   }
   groupSubmitting.value = true
@@ -203,11 +204,11 @@ async function submitGroup(): Promise<boolean> {
     groupList.value = editing
       ? await updateProjectGroup(projectId.value, editing.id, input)
       : await createProjectGroup(projectId.value, input)
-    Message.success(editing ? '用户组已更新' : '用户组已创建')
+    Message.success(editing ? t('project_detail.group.updated') : t('project_detail.group.created'))
     return true
   } catch (error) {
     console.error('保存用户组失败:', error)
-    Message.error(error instanceof Error ? error.message : '保存失败')
+    Message.error(error instanceof Error ? error.message : t('project_detail.save_failed'))
     return false
   } finally {
     groupSubmitting.value = false
@@ -218,10 +219,10 @@ async function confirmDeleteGroup(group: ProjectGroup) {
   try {
     await deleteProjectGroup(projectId.value, group.id)
     groupList.value = groupList.value.filter((item) => item.id !== group.id)
-    Message.success(`用户组 ${group.name} 已删除`)
+    Message.success(t('project_detail.group.deleted', { name: group.name }))
   } catch (error) {
     console.error('删除用户组失败:', error)
-    Message.error(error instanceof Error ? error.message : '删除失败')
+    Message.error(error instanceof Error ? error.message : t('project_detail.delete_failed'))
   }
 }
 
@@ -250,20 +251,20 @@ function syncSettingsForm(project: ProjectDetail) {
 async function saveSettings() {
   const slug = settingsForm.slug.trim()
   if (!validSlug(slug)) {
-    Message.error(`地址标识${SLUG_MESSAGE}`)
+    Message.error(t('slug.invalid'))
     return
   }
   settingsSaving.value = true
   try {
     detail.value = await updateProject(projectId.value, { ...settingsForm, slug })
-    Message.success('设置已保存')
+    Message.success(t('project_detail.settings_saved'))
     // slug 改变后地址需要跟上新标识，历史记录里不留下旧地址
     if (slug !== projectSlug.value) {
       router.replace({ name: 'project-detail', params: { slug } })
     }
   } catch (error) {
     console.error('保存项目设置失败:', error)
-    Message.error(error instanceof Error ? error.message : '保存失败')
+    Message.error(error instanceof Error ? error.message : t('project_detail.save_failed'))
   } finally {
     settingsSaving.value = false
   }
@@ -291,7 +292,7 @@ async function onPartSaved() {
     partRows.value = await projectProgress(projectId.value, ui.currentLanguage)
   } catch (error) {
     console.error('刷新部件进度失败:', error)
-    Message.error(error instanceof Error ? error.message : '刷新部件进度失败')
+    Message.error(error instanceof Error ? error.message : t('project_detail.parts_refresh_failed'))
   }
 }
 
@@ -315,7 +316,7 @@ function openPart(row: ProgressRow) {
     <a-spin :loading="loading" class="project-detail__spin">
       <a-result v-if="loadError" status="error" :title="loadError">
         <template #extra>
-          <a-button type="primary" @click="load">重试</a-button>
+          <a-button type="primary" @click="load">{{ $t('common.retry') }}</a-button>
         </template>
       </a-result>
 
@@ -329,12 +330,12 @@ function openPart(row: ProgressRow) {
             <a-typography-text type="secondary">{{ detail.description }}</a-typography-text>
           </div>
           <a-space>
-            <a-tag color="arcoblue">{{ roleLabels[detail.role] }}</a-tag>
+            <a-tag color="arcoblue">{{ roleLabel(detail.role) }}</a-tag>
           </a-space>
         </div>
 
         <a-tabs default-active-key="parts">
-          <a-tab-pane key="parts" title="部件">
+          <a-tab-pane key="parts" :title="$t('project_detail.tab_parts')">
             <div class="project-detail__tab-actions">
               <a-select
                 :model-value="ui.currentLanguage"
@@ -351,14 +352,14 @@ function openPart(row: ProgressRow) {
                 @click="router.push({ name: 'component-new', query: { project: String(projectId) } })"
               >
                 <template #icon><icon-plus /></template>
-                添加部件
+                {{ $t('project_detail.add_part') }}
               </a-button>
             </div>
-            <a-empty v-if="partRows.length === 0" description="还没有部件" />
+            <a-empty v-if="partRows.length === 0" :description="$t('project_detail.no_parts')" />
             <template v-else>
               <ProgressTable
                 :rows="partRows"
-                name-label="部件"
+                :name-label="$t('project_detail.part_label')"
                 @row-click="openPart"
               >
                 <template #name="{ row }">
@@ -369,41 +370,41 @@ function openPart(row: ProgressRow) {
                     size="mini"
                     @click.stop="openEditPart(row)"
                   >
-                    编辑
+                    {{ $t('project_detail.edit') }}
                   </a-button>
                 </template>
               </ProgressTable>
 
               <a-typography-title :heading="6" class="project-detail__group-title">
-                各语言完成情况
+                {{ $t('project_detail.language_progress_title') }}
               </a-typography-title>
               <LanguageProgress :rows="languageRows" />
             </template>
           </a-tab-pane>
 
-          <a-tab-pane key="members" title="成员">
+          <a-tab-pane key="members" :title="$t('project_detail.tab_members')">
             <div v-if="canManage" class="project-detail__tab-actions">
               <a-button type="primary" @click="addVisible = true">
                 <template #icon><icon-plus /></template>
-                添加成员
+                {{ $t('member.add') }}
               </a-button>
             </div>
             <a-table :data="memberList" :pagination="false">
               <template #columns>
-                <a-table-column title="用户名" data-index="username" />
-                <a-table-column title="显示名" data-index="displayName" />
-                <a-table-column title="角色">
+                <a-table-column :title="$t('member.col_username')" data-index="username" />
+                <a-table-column :title="$t('member.col_display_name')" data-index="displayName" />
+                <a-table-column :title="$t('member.col_role')">
                   <template #cell="{ record }">
-                    {{ roleLabels[(record as ProjectMember).role] }}
+                    {{ roleLabel((record as ProjectMember).role) }}
                   </template>
                 </a-table-column>
-                <a-table-column v-if="canManage" title="操作" :width="120">
+                <a-table-column v-if="canManage" :title="$t('member.col_action')" :width="120">
                   <template #cell="{ record }">
                     <a-popconfirm
-                      content="确定移除该成员？"
+                      :content="$t('member.remove_confirm')"
                       @ok="confirmRemove(record as ProjectMember)"
                     >
-                      <a-button type="text" status="danger" size="small">移除</a-button>
+                      <a-button type="text" status="danger" size="small">{{ $t('member.remove') }}</a-button>
                     </a-popconfirm>
                   </template>
                 </a-table-column>
@@ -411,41 +412,41 @@ function openPart(row: ProgressRow) {
             </a-table>
           </a-tab-pane>
 
-          <a-tab-pane v-if="canManage" key="groups" title="用户组">
+          <a-tab-pane v-if="canManage" key="groups" :title="$t('project_detail.tab_groups')">
             <div class="project-detail__tab-actions">
               <a-button type="primary" @click="openCreateGroup">
                 <template #icon><icon-plus /></template>
-                新建用户组
+                {{ $t('project_detail.group.new') }}
               </a-button>
             </div>
             <a-table :data="groupList" :pagination="false">
               <template #columns>
-                <a-table-column title="名称" data-index="name" />
-                <a-table-column title="权限" :width="120">
+                <a-table-column :title="$t('project_detail.group.name')" data-index="name" />
+                <a-table-column :title="$t('project_detail.group.permissions')" :width="120">
                   <template #cell="{ record }">
                     <a-tag v-if="(record as ProjectGroup).permissions.includes('approve')" color="green">
-                      批准译文
+                      {{ $t('project_detail.group.approve') }}
                     </a-tag>
-                    <a-typography-text v-else type="secondary">无</a-typography-text>
+                    <a-typography-text v-else type="secondary">{{ $t('project_detail.group.none') }}</a-typography-text>
                   </template>
                 </a-table-column>
-                <a-table-column title="成员">
+                <a-table-column :title="$t('project_detail.group.members')">
                   <template #cell="{ record }">
                     <a-space v-if="(record as ProjectGroup).members.length > 0" wrap>
                       <a-tag v-for="member in (record as ProjectGroup).members" :key="member">{{ member }}</a-tag>
                     </a-space>
-                    <a-typography-text v-else type="secondary">暂无成员</a-typography-text>
+                    <a-typography-text v-else type="secondary">{{ $t('project_detail.group.no_members') }}</a-typography-text>
                   </template>
                 </a-table-column>
-                <a-table-column title="操作" :width="160">
+                <a-table-column :title="$t('project_detail.group.action')" :width="160">
                   <template #cell="{ record }">
                     <a-space>
-                      <a-button type="text" size="small" @click="openEditGroup(record as ProjectGroup)">编辑</a-button>
+                      <a-button type="text" size="small" @click="openEditGroup(record as ProjectGroup)">{{ $t('project_detail.edit') }}</a-button>
                       <a-popconfirm
-                        content="确定删除该用户组？"
+                        :content="$t('project_detail.group.delete_confirm')"
                         @ok="confirmDeleteGroup(record as ProjectGroup)"
                       >
-                        <a-button type="text" status="danger" size="small">删除</a-button>
+                        <a-button type="text" status="danger" size="small">{{ $t('project_detail.delete') }}</a-button>
                       </a-popconfirm>
                     </a-space>
                   </template>
@@ -454,51 +455,51 @@ function openPart(row: ProgressRow) {
             </a-table>
           </a-tab-pane>
 
-          <a-tab-pane v-if="canManage" key="settings" title="设置">
+          <a-tab-pane v-if="canManage" key="settings" :title="$t('project_detail.tab_settings')">
             <a-form :model="settingsForm" layout="vertical" class="project-detail__settings" @submit-success="saveSettings">
-              <a-typography-title :heading="6" class="project-detail__group-title">基本信息</a-typography-title>
-              <a-form-item field="name" label="项目名称" required :rules="[{ required: true, message: '项目名称不能为空' }]">
+              <a-typography-title :heading="6" class="project-detail__group-title">{{ $t('project_detail.basic') }}</a-typography-title>
+              <a-form-item field="name" :label="$t('project.name')" required :rules="[{ required: true, message: $t('project.name_required') }]">
                 <a-input v-model="settingsForm.name" allow-clear />
               </a-form-item>
-              <a-form-item field="slug" label="地址标识" required :extra="SLUG_MESSAGE">
+              <a-form-item field="slug" :label="$t('slug.label')" required :extra="$t('slug.hint')">
                 <a-input v-model="settingsForm.slug" allow-clear />
               </a-form-item>
-              <a-form-item field="namespace" label="命名空间" required :rules="[{ required: true, message: '命名空间不能为空' }]">
+              <a-form-item field="namespace" :label="$t('project.namespace')" required :rules="[{ required: true, message: $t('project.namespace_required') }]">
                 <a-input v-model="settingsForm.namespace" allow-clear />
               </a-form-item>
-              <a-form-item field="description" label="项目简介">
+              <a-form-item field="description" :label="$t('project.description')">
                 <a-textarea v-model="settingsForm.description" :auto-size="{ minRows: 2 }" allow-clear />
               </a-form-item>
 
-              <a-typography-title :heading="6" class="project-detail__group-title">文件</a-typography-title>
-              <a-form-item field="fileMask" label="语言文件掩码">
+              <a-typography-title :heading="6" class="project-detail__group-title">{{ $t('project_detail.files') }}</a-typography-title>
+              <a-form-item field="fileMask" :label="$t('project.file_mask')">
                 <a-input v-model="settingsForm.fileMask" allow-clear />
               </a-form-item>
-              <a-form-item field="templatePath" label="翻译模板文件">
+              <a-form-item field="templatePath" :label="$t('project.template_path')">
                 <a-input v-model="settingsForm.templatePath" allow-clear />
               </a-form-item>
 
               <a-form-item>
-                <a-button type="primary" html-type="submit" :loading="settingsSaving">保存设置</a-button>
+                <a-button type="primary" html-type="submit" :loading="settingsSaving">{{ $t('project_detail.save_settings') }}</a-button>
               </a-form-item>
             </a-form>
           </a-tab-pane>
         </a-tabs>
 
-        <a-modal v-model:visible="groupVisible" :title="groupEditing ? '编辑用户组' : '新建用户组'" :ok-loading="groupSubmitting" :on-before-ok="submitGroup">
+        <a-modal v-model:visible="groupVisible" :title="groupEditing ? $t('project_detail.group.edit_title') : $t('project_detail.group.new')" :ok-loading="groupSubmitting" :on-before-ok="submitGroup">
           <a-form :model="groupForm" layout="vertical">
-            <a-form-item label="名称" required>
-              <a-input v-model="groupForm.name" placeholder="输入用户组名称" allow-clear />
+            <a-form-item :label="$t('project_detail.group.name')" required>
+              <a-input v-model="groupForm.name" :placeholder="$t('project_detail.group.name_placeholder')" allow-clear />
             </a-form-item>
-            <a-form-item label="权限">
-              <a-checkbox v-model="groupForm.approve">批准译文</a-checkbox>
+            <a-form-item :label="$t('project_detail.group.permissions')">
+              <a-checkbox v-model="groupForm.approve">{{ $t('project_detail.group.approve') }}</a-checkbox>
             </a-form-item>
-            <a-form-item label="成员">
+            <a-form-item :label="$t('project_detail.group.members')">
               <a-select
                 v-model="groupForm.members"
                 multiple
                 allow-create
-                placeholder="输入用户名后回车添加成员"
+                :placeholder="$t('project_detail.group.members_placeholder')"
               />
             </a-form-item>
           </a-form>
@@ -512,16 +513,16 @@ function openPart(row: ProgressRow) {
           @closed="onPartModalClosed"
         />
 
-        <a-modal v-model:visible="addVisible" title="添加成员" :ok-loading="addSubmitting" :on-before-ok="submitAddMember">
+        <a-modal v-model:visible="addVisible" :title="$t('member.add')" :ok-loading="addSubmitting" :on-before-ok="submitAddMember">
           <a-form :model="addForm" layout="vertical">
-            <a-form-item label="用户名" required>
-              <a-input v-model="addForm.username" placeholder="输入用户名" allow-clear />
+            <a-form-item :label="$t('member.col_username')" required>
+              <a-input v-model="addForm.username" :placeholder="$t('member.username_placeholder')" allow-clear />
             </a-form-item>
-            <a-form-item label="角色">
+            <a-form-item :label="$t('member.col_role')">
               <a-select v-model="addForm.role">
-                <a-option value="translator">译者</a-option>
-                <a-option value="maintainer">维护者</a-option>
-                <a-option value="owner">所有者</a-option>
+                <a-option value="translator">{{ $t('member.role.translator') }}</a-option>
+                <a-option value="maintainer">{{ $t('member.role.maintainer') }}</a-option>
+                <a-option value="owner">{{ $t('member.role.owner') }}</a-option>
               </a-select>
             </a-form-item>
           </a-form>

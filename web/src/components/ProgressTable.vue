@@ -1,5 +1,7 @@
 <script setup lang="ts">
 // 仪表盘与项目详情共用的翻译进度表：名称列 + 八项统计 + 行内进度条
+import { useLocaleStore } from '@/i18n'
+import { formatNumber } from '../format'
 import type { ProgressRow } from '../api/types'
 
 defineProps<{
@@ -12,9 +14,7 @@ const emit = defineEmits<{
   rowClick: [row: ProgressRow]
 }>()
 
-function formatNumber(value: number): string {
-  return value.toLocaleString()
-}
+const localeStore = useLocaleStore()
 </script>
 
 <template>
@@ -48,13 +48,13 @@ function formatNumber(value: number): string {
           <icon-check-circle-fill v-if="row.translatedPercent >= 100" class="progress-table__done" />
           <template v-else>{{ row.translatedPercent }}%</template>
         </span>
-        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.incompleteStrings) }}</span>
-        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.incompleteWords) }}</span>
-        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.incompleteChars) }}</span>
-        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.untranslatedStrings) }}</span>
-        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.failingChecks) }}</span>
-        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.suggestions) }}</span>
-        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.comments) }}</span>
+        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.incompleteStrings, localeStore.current.bcp47) }}</span>
+        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.incompleteWords, localeStore.current.bcp47) }}</span>
+        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.incompleteChars, localeStore.current.bcp47) }}</span>
+        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.untranslatedStrings, localeStore.current.bcp47) }}</span>
+        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.failingChecks, localeStore.current.bcp47) }}</span>
+        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.suggestions, localeStore.current.bcp47) }}</span>
+        <span class="progress-table__cell progress-table__cell--number">{{ formatNumber(row.comments, localeStore.current.bcp47) }}</span>
       </div>
       <a-progress
         :percent="row.translatedPercent / 100"
